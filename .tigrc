@@ -1,0 +1,2 @@
+set commit-order = reverse
+set start-on-head = true
