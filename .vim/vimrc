@@ -1,0 +1,729 @@
+"" The basics
+set nocompatible | filetype indent plugin on | syn on
+set encoding=utf-8
+""
+
+""""""""" vim plug """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+call plug#begin('~/.vim/plugged')
+
+" Netrw improvements
+Plug 'tpope/vim-vinegar'
+
+" Shortcuts for navigation and stuff
+Plug 'tpope/vim-unimpaired'
+
+" Git stuff for vim
+Plug 'tpope/vim-fugitive'
+
+" Colorschemes
+Plug 'baeuml/summerfruit256.vim'
+Plug 'vim-scripts/calmar256-lightdark.vim'
+Plug 'sonph/onehalf', {'rtp': 'vim/'}
+
+" [ARCHIVE]
+" Plug 'nathanaelkane/vim-indent-guides'
+" let g:indent_guides_start_level=2
+" let g:indent_guides_guide_size=1
+" hi IndentGuidesOdd ctermbg=darkgrey
+" hi IndentGuidesEven ctermbg=darkgrey
+
+"Solidity (ethereum) syntax
+"Plug 'tomlion/vim-solidity', { 'for': ['solidity'] }
+Plug 'TovarishFin/vim-solidity', { 'for': ['solidity'] }
+
+""Load the local eslint and not the global one (through `npm bin`)
+"Plug 'mtscout6/syntastic-local-eslint.vim', { 'commit': '3700f01459b9532ead77874f8910bf0499e2461c', 'for': ['javascript', 'javascript.jsx', 'jsx'] }
+
+"Syntax checking for lots of filetypes
+" Plug 'vim-syntastic/syntastic', { 'on':  'SyntasticToggleMode' }
+" nmap <leader>S :SyntasticToggleMode<CR>
+" let g:syntastic_mode_map = {'mode': 'passive'}
+" let g:syntastic_error_symbol = '✗'
+" let g:syntastic_warning_symbol = '!'
+" let g:syntastic_javascript_checkers = ['eslint']
+" let g:syntastic_always_populate_loc_list = 1  " for :lnext to work (``[l`` w/ unimpaired)
+" let g:syntastic_python_checkers=['flake8', 'pylint']  " removed --rcfile ~/.pylintrc because was crashing vim
+
+Plug 'dense-analysis/ale'
+let g:ale_linters = {
+\   'javascript': ['eslint'],
+\   'javascriptreact': ['eslint'],
+\   'typescript': ['eslint', 'tsserver'],
+\   'typescriptreact': ['eslint', 'tsserver'],
+\   'python': ['pylint'],
+\   'haskell': ['hlint', 'ghc'],
+\   'solidity': ['solhint'],
+\}
+let g:ale_fixers = {
+\   'javascript': ['prettier'],
+\   'javascriptreact': ['prettier'],
+\   'typescript': ['prettier'],
+\   'typescriptreact': ['prettier'],
+\   'yaml': ['prettier'],
+\   'css': ['prettier'],
+\   'python': ['isort', 'black'],
+\   'html': ['prettier'],
+\   'haskell': ['stylish-haskell'],
+\   'solidity': ['prettier'],
+\}
+let g:ale_linters_explicit = 1
+let g:ale_fix_on_save = 1
+let g:ale_set_highlights = 0
+nmap <silent> <C-k> <Plug>(ale_previous_wrap)
+nmap <silent> <C-j> <Plug>(ale_next_wrap)
+let g:ale_python_auto_pipenv = 1
+let g:ale_pattern_options = { '.direnv': { 'ale_fixers': [] }, 'node_modules': { 'ale_fixers': [] } }
+let g:ale_haskell_ghc_options = '-fno-code -v0 -isrc'
+
+Plug 'elzr/vim-json', { 'for': 'json' }
+
+"vim-easymotion: jump cursor position easily.
+"normal mode: <leader><leader>w // <leader><leader>f{letter}
+Plug 'Lokaltog/vim-easymotion'
+
+"FZF: fuzzy finder
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
+Plug 'junegunn/fzf.vim'
+nmap <leader>f :call fzf#run(fzf#wrap({'source': 'git ls-files --exclude-standard --others --cached'}))<Enter>
+command! -bang -nargs=* GGrep
+\ call fzf#vim#grep(
+\   'git grep --line-number -- '.shellescape(<q-args>), 0,
+\   fzf#vim#with_preview({'dir': systemlist('git rev-parse --show-toplevel')[0]}), <bang>0)
+"command! -bang -nargs=* GGrep call fzf#vim#grep('git grep --line-number '.shellescape(<q-args>), 0, <bang>0)
+
+"grep.vim: all greps in files and buffers
+Plug 'vim-scripts/grep.vim'
+
+"jedi-vim: python completion and more
+"Completion <C-Space>
+"Goto assignments <leader>g (typical goto function)
+"Goto definitions <leader>d (follow identifier as far as possible, includes
+"imports and statements)
+"Show Documentation/Pydoc K (shows a popup with assignments)
+"Renaming <leader>r
+"Usages <leader>n (shows all the usages of a name)
+" Open module, e.g. :Pyimport os (opens the os module)
+Plug 'davidhalter/jedi-vim', { 'for': 'python' }
+let g:jedi#popup_on_dot = 0
+let g:jedi#show_call_signatures = 0
+let g:jedi#use_splits_not_buffers = "left"
+let g:jedi#smart_auto_mappings = 0
+
+"black
+Plug 'psf/black', { 'for': 'python', 'branch': 'stable' }
+
+"python-pep8-indent: good indent
+Plug 'hynek/vim-python-pep8-indent', { 'for': 'python' }
+
+"python doctests
+Plug 'Rykka/doctest.vim', { 'for': 'python' }
+
+"Typescript
+Plug 'Quramy/tsuquyomi'
+let g:tsuquyomi_completion_detail = 1
+autocmd FileType typescript setlocal completeopt+=menu,preview
+autocmd FileType typescript nmap <buffer> <Leader>t :<C-u>echo tsuquyomi#hint()<CR>
+
+"Haskell
+Plug 'neovimhaskell/haskell-vim'
+
+"vim-visual-star-search: select visually, and press * or \* to search excactly
+"for what's visually selected
+Plug 'bronson/vim-visual-star-search'
+
+"[ARCHIVE]
+"Tagbar
+"Pane with current file code structure
+Plug 'preservim/tagbar'
+nnoremap <silent> <F4> :TagbarToggle<CR>
+let g:tagbar_left = 1
+
+"Status bar
+"Plug 'vim-airline/vim-airline'
+"let g:airline_powerline_fonts = 1
+" disabled for causing weird chars in output
+"let g:airline#extensions#tagbar#enabled = 0
+
+"Kwbd
+"Delete current buffer and show the one after, without shutting the current
+"window down
+"WAS MODIFIED BY HAND IN FILE
+Plug 'rgarver/Kwbd.vim'
+nmap <C-W>! <Plug>Kwbd
+
+Plug 'chrisbra/csv.vim', { 'for': 'csv' }
+
+"Share config with other editors and the team
+Plug 'editorconfig/editorconfig-vim'
+
+Plug 'jgdavey/tslime.vim'
+vmap <C-c><C-c> <Plug>SendSelectionToTmux
+nmap <C-c><C-c> <Plug>NormalModeSendToTmux
+nmap <C-c>r <Plug>SetTmuxVars
+
+"Align stuff vertically, used by vim-markdown
+Plug 'godlygeek/tabular'
+"Better markdown stuff
+Plug 'plasticboy/vim-markdown', { 'for': ['markdown'] }
+"let g:vim_markdown_conceal = 2
+let g:vim_markdown_conceal_code_blocks = 0
+let g:vim_markdown_strikethrough = 1 "~~Scratch this.~~
+"let g:vim_markdown_no_extensions_in_markdown = 1
+let g:vim_markdown_edit_url_in = 'tab'
+let g:vim_markdown_auto_insert_bullets = 0
+let g:vim_markdown_new_list_item_indent = 0
+let g:vim_markdown_folding_style_pythonic = 1
+let g:vim_markdown_folding_level = 3
+
+Plug 'ferrine/md-img-paste.vim', { 'for': ['markdown'] }
+autocmd FileType markdown nmap <buffer><silent> <leader>I :call mdip#MarkdownClipboardImage()<CR>
+let g:mdip_imgname = 'clpbrdimg'
+
+"Markdown preview
+Plug 'iamcco/markdown-preview.nvim', { 'do': { -> mkdp#util#install() }, 'for': ['markdown', 'vim-plug']}
+"autocmd FileType markdown nmap <buffer><silent> <leader>P :!open "%"<CR>
+autocmd FileType markdown nmap <leader>P <Plug>MarkdownPreviewToggle
+
+"Markdown geneated Toc
+Plug 'mzlogin/vim-markdown-toc'
+
+" Sessions mgt:
+Plug 'tpope/vim-obsession'
+
+call plug#end()
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+"" Clipboard === system clipboard
+set clipboard=unnamed
+
+"" Background
+" In case vim doesn't understand there is color
+if $TERM == "xterm-256color" || $TERM == "screen-256color" || $COLORTERM == "gnome-terminal"
+  set t_Co=256
+endif
+" 👓 https://arslan.io/2021/02/15/automatic-dark-mode-for-terminal-applications/
+" Approach dropped.
+function! _UpdateBackground(invert)
+  if $VIM_THEME == "hacking"
+    set background=dark
+    colorscheme slate
+  else
+    let hour = str2nr(strftime('%H'))
+    let hourTest = (hour < 8) || (hour >= 18)
+    if hourTest || a:invert
+      set background=dark   " for the dark version of the theme
+      colorscheme onehalfdark
+    else
+      set background=light  " for the light version of the theme
+      if $VIM_THEME == "writing"
+        colorscheme calmar256-light
+      else
+        colorscheme onehalflight
+        hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
+      endif
+    endif
+  endif
+endfunction
+call _UpdateBackground(0)
+command BkgUpdate :call _UpdateBackground(0)
+command BkgRevert :call _UpdateBackground(1)
+
+"" Color
+" Change colorscheme
+"command ThemeDark set background=dark | colorscheme oceandeep
+"command ThemeLight set background=light | colorscheme summerfruit256 | hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
+"command ThemeWritingLight set background=light | colorscheme calmar256-light
+"if $VIM_THEME == "hacking"
+"  ThemeDark
+"  " set background=dark
+"  " colorscheme oceandeep
+"elseif $VIM_THEME == "writing"
+"  ThemeWritingLight
+"  " set background=light
+"  " colorscheme calmar256-light
+"else
+"  ThemeLight
+"  "set background=light 
+"  "colorscheme summerfruit256
+"  "hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
+"endif
+
+" Cursor
+if $TERM_PROGRAM =~ "iTerm"
+  let &t_SI = "\<Esc>]50;CursorShape=1\x7" " Vertical bar in insert mode
+  let &t_SR = "\<Esc>]50;CursorShape=2\x7" " Underscore in replace mode
+  let &t_EI = "\<Esc>]50;CursorShape=0\x7" " Block in normal mode
+endif
+
+"" Visual stuff
+" Cursor line highlight
+set cursorline
+" Turn on line numbering. Turn it off with set nonu 
+set nu 
+" Show line and column number
+set ruler
+" Make the window title reflect the file being edited
+set title
+set titlestring=%F\ (VIM)
+" No extra spaces between rows
+set linespace=0
+" Show matching brackets/parenthesis
+set showmatch
+" Ignore some stuff when looking for files
+set wildignore=*.swp,*.bak,*.pyc,*.class
+" Mucho
+set history=1000
+set undolevels=1000
+" number of cols for the line numbers
+set numberwidth=3
+""
+
+"" Backup and swaps
+set nobackup
+" For the swap files
+set directory=~/.vim/tmp
+""
+
+""
+" textwidth default
+set tw=80
+" but not when:
+autocmd FileType html setlocal tw=0
+autocmd FileType htmldjango setlocal tw=0
+autocmd FileType text setlocal tw=0
+" higlight code when too far
+"highlight OverLength ctermbg=darkred ctermfg=white guibg=#FFD9D9
+"match OverLength /\%>80v.\+/
+"match ErrorMsg '\%>80v.\+'
+
+
+" colorcolumn
+"set cc=+1
+"highlight ColorColumn ctermbg=0
+""
+
+
+"" Writing and moving
+
+" allow backspacing over everything in insert mode
+set backspace=indent,eol,start                      
+" arrows
+vmap <Left> <gv
+vmap <Right> >gv
+nmap <Up> gk
+nmap <Down> gj
+" Tabs => spaces and so on
+set et
+set ai
+set ts=2
+set sts=2
+set sw=2
+" Which Wrap for endline n <-> beginningline n+1
+set ww+=b,s,<,>,[,],h,l
+" Wrap text instead of being on one line
+set lbr
+" Indent like previous line
+set autoindent
+""
+
+"" Searching
+
+" Case insensitive search
+set ignorecase
+" no ignorecase when # * or gd
+set smartcase
+" NOT find as you type search
+set noincsearch
+" highlight search terms
+set hlsearch
+""
+
+"" Menus
+
+" show list instead of just completing
+set wildmenu
+" command <Tab> completion, list matches, then longest common part, then all.
+set wildmode=list:longest,full
+""
+
+"" Folding
+
+set foldmethod=manual
+autocmd FileType python set foldmethod=indent
+autocmd FileType scss set foldmethod=marker
+autocmd FileType scss set foldmarker={,}
+autocmd FileType css set foldmethod=marker
+autocmd FileType css set foldmarker={,}
+set foldnestmax=10
+set nofoldenable
+set foldlevel=1
+" Don't update folds in insert mode (so that insert doesn't auto-opens all
+" following folds)
+aug NoInsertFolding 
+ 	au!
+ 	au InsertEnter * let b:oldfdm = &l:fdm | setl fdm=manual 
+ 	au InsertLeave * let &l:fdm = b:oldfdm 
+aug END 
+
+" Yaml
+au! BufNewFile,BufReadPost *.{yaml,yml} set filetype=yaml foldmethod=indent
+autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+
+
+" formatoptions
+set formatoptions-=to formatoptions+=crql
+
+""
+
+
+"" 
+" Make sure vim checks for 'set commands' in opened files
+" (smg like /* vim: tw=60 ts=2: */)
+set modeline
+set modelines=1
+""
+
+
+" Typos
+"cmap Q q
+cmap vps vsp
+
+
+
+"" Buffers
+" modified buffers can be in background
+set hidden
+noremap Œ :bprev<cr>
+"noremap  ̑ :bprev<cr>
+
+set splitright
+set splitbelow
+
+function! DeleteInactiveBufs()
+    "From tabpagebuflist() help, get a list of all buffers in all tabs
+    let tablist = []
+    for i in range(tabpagenr('$'))
+        call extend(tablist, tabpagebuflist(i + 1))
+    endfor
+
+    "Below originally inspired by Hara Krishna Dara and Keith Roberts
+    "http://tech.groups.yahoo.com/group/vim/message/56425
+    let nWipeouts = 0
+    for i in range(1, bufnr('$'))
+        if bufexists(i) && !getbufvar(i,"&mod") && index(tablist, i) == -1
+        "bufno exists AND isn't modified AND isn't in the list of buffers open in windows and tabs
+            silent exec 'bwipeout' i
+            let nWipeouts = nWipeouts + 1
+        endif
+    endfor
+    echomsg nWipeouts . ' buffer(s) wiped out'
+endfunction
+command! Bdi :call DeleteInactiveBufs()
+
+
+"" Mouse support
+set mouse=nicr                 " automatically enable mouse usage
+if has('mouse_sgr')
+  set ttymouse=sgr
+endif
+""
+
+
+"" Enable omnicomplete
+"autocmd FileType python set omnifunc=pythoncomplete#Complete => jedi-vim now
+"autocmd FileType javascript set omnifunc=javascriptcomplete#CompleteJS
+"autocmd FileType html set omnifunc=htmlcomplete#CompleteTags
+"autocmd FileType css set omnifunc=csscomplete#CompleteCSS
+""
+
+
+"" Custom controls
+
+" Change current directory to that of the current buffer with \cd
+map <leader>cd :cd %:p:h<CR>
+" remove highlight 
+nmap \q :nohlsearch<CR>
+" set paste
+nmap <leader>o :set paste!<CR>
+""
+
+
+
+" For PyFlakes color
+hi clear SpellBad
+hi SpellBad cterm=underline,bold
+
+
+" When editing a file, always jump to the last known cursor position.
+" Don't do it when the position is invalid or when inside an event handler
+" (happens when dropping a file on gvim).
+" Also don't do it when the mark is in the first line, that is the default
+" position when opening a file.
+autocmd BufReadPost *
+  \ if line("'\"") > 1 && line("'\"") <= line("$") |
+  \   exe "normal! g`\"" |
+  \ endif
+
+" Use vertical diff
+set diffopt+=vertical
+
+" Convenient command to see the difference between the current buffer and the
+" file it was loaded from, thus the changes you made.                         
+" Only define it when not defined already.
+if !exists(":DiffOrig")
+  command DiffOrig vert new | set bt=nofile | r # | 0d_ | diffthis
+                  \ | wincmd p | diffthis
+endif
+
+" diff colors
+highlight DiffAdd    cterm=bold ctermbg=194 gui=none
+highlight DiffDelete cterm=bold ctermbg=1 gui=none
+highlight DiffChange cterm=bold ctermbg=192 gui=none
+highlight DiffText   cterm=bold ctermbg=7 gui=none
+
+" Diff current buffer with saved file
+function! s:DiffWithSaved()
+  let filetype=&ft
+  diffthis
+  vnew | r # | normal! 1Gdd
+  diffthis
+  exe "setlocal bt=nofile bh=wipe nobl noswf ro ft=" . filetype
+endfunction
+com! DiffSaved call s:DiffWithSaved()
+
+" italics
+highlight Comment cterm=italic
+set t_ZH=[3m
+set t_ZR=[23m
+
+" window swapper
+function! MarkWindowSwap()
+    let g:markedWinNum = winnr()
+endfunction
+function! DoWindowSwap()
+    "Mark destination
+    let curNum = winnr()
+    let curBuf = bufnr( "%" )
+    exe g:markedWinNum . "wincmd w"
+    "Switch to source and shuffle dest->source
+    let markedBuf = bufnr( "%" )
+    "Hide and open so that we aren't prompted and keep history
+    exe 'hide buf' curBuf
+    "Switch to dest and shuffle source->dest
+    exe curNum . "wincmd w"
+    "Hide and open so that we aren't prompted and keep history
+    exe 'hide buf' markedBuf 
+endfunction
+
+nmap <silent> <leader>mw :call MarkWindowSwap()<CR>
+nmap <silent> <leader>pw :call DoWindowSwap()<CR>
+
+
+
+
+" For vim tabs:
+
+"use alt-<number> to switch tabs, alt-q for left, alt-s for right
+noremap œ gT
+noremap ß gt
+noremap ¡ 1gt
+noremap ™ 2gt
+noremap £ 3gt
+noremap ¢ 4gt
+noremap ∞ 5gt
+noremap § 6gt
+noremap ¶ 7gt
+noremap • 8gt
+noremap ª 9gt
+noremap † :tabnew<CR>
+
+function MoveToPrevTab()
+  "there is only one window
+  if tabpagenr('$') == 1 && winnr('$') == 1
+    return
+  endif
+  "preparing new window
+  let l:tab_nr = tabpagenr('$')
+  let l:cur_buf = bufnr('%')
+  if tabpagenr() != 1
+    close!
+    if l:tab_nr == tabpagenr('$')
+      tabprev
+    endif
+    sp
+  else
+    close!
+    exe "0tabnew"
+  endif
+  "opening current buffer in new window
+  exe "b".l:cur_buf
+endfunc
+
+function MoveToNextTab()
+  "there is only one window
+  if tabpagenr('$') == 1 && winnr('$') == 1
+    return
+  endif
+  "preparing new window
+  let l:tab_nr = tabpagenr('$')
+  let l:cur_buf = bufnr('%')
+  if tabpagenr() < tab_nr
+    close!
+    if l:tab_nr == tabpagenr('$')
+      tabnext
+    endif
+    sp
+  else
+    close!
+    tabnew
+  endif
+  "opening current buffer in new window
+  exe "b".l:cur_buf
+endfunc
+
+nnoremap <silent> <leader>mt :call MoveToNextTab()<CR> nnoremap <silent> <leader>mr :call MoveToPrevTab()<CR>
+
+
+" tab names thing
+
+" Usage:
+" :TName 'tabname' - set name for current tab page
+" :TNoName - remove name (page name = buffer name)
+
+if exists('tab_name_plugin')
+    finish
+endif
+
+let tab_name_plugin = 1
+
+function! s:SetTabName(name)
+    let t:tab_name = a:name
+
+    for win_number in range(1, winnr('$'))
+        call setwinvar(win_number, "tab_win_name", a:name)
+    endfor
+
+    call s:RefreshTab()
+endfunction
+
+function! s:RemoveTabName()
+    for win_number in range(1, winnr('$'))
+        call setwinvar(win_number, "tab_win_name", '')
+    endfor
+    unlet t:tab_name
+
+    call s:RefreshTab()
+endfunction
+
+function! s:RefreshTab()
+    set tabline=%!TabCaptionLineFunction()
+	set guitablabel=%{TabGuiCaptionLabel()}
+endfunction
+
+function! TabCaptionLabel(number)
+    let caption = ' '
+    let tab_name = gettabwinvar(a:number, 1, 'tab_win_name') 
+
+    let buflist = tabpagebuflist(a:number)
+    let winnr = tabpagewinnr(a:number)
+	let buf_name = bufname(buflist[winnr - 1])
+
+    if tab_name == ''
+        let caption .= pathshorten(buf_name)
+    else
+        let caption .= tab_name
+    endif
+    return caption.' '
+endfunction
+
+
+function! TabCaptionLineFunction()
+    let line = ''
+    for i in range(tabpagenr('$'))
+
+        let modified_part = ''
+        let bufnrlist = tabpagebuflist(i+1)
+        for bufnr in bufnrlist
+            if getbufvar(bufnr, "&modified")
+                let modified_part = '+'
+                break
+            endif
+        endfor
+
+        let caption = '['.(i+1).modified_part.']'
+        let line .= '%#String#'.caption
+        " select the highlighting
+        if i + 1 == tabpagenr()
+            let line .= '%#TabLineSel#'
+        else
+            if i % 2 == 0
+                let line .= '%#TabLine#'
+            else
+                let line .= '%#TabLine#'
+            endif
+        endif
+
+        let line .= '%' . (i + 1) . 'T'
+
+        let line .= TabCaptionLabel(i + 1)
+    endfor
+
+    let line .= '%#TabLineFill#%T'
+
+    if tabpagenr('$') > 1
+        let line .= '%=%#TabLine#%999Xclose'
+    endif
+
+    return line
+endfunction
+
+
+function! s:TabWinEnter()
+    if exists('t:tab_name')
+        call setwinvar(winnr(), "tab_win_name", t:tab_name)
+    endif
+endfunction
+    
+augroup TabLabelNameAU
+    au!
+    au WinEnter * call s:TabWinEnter()
+augroup END
+
+call s:RefreshTab()
+
+command! -nargs=1 TabName call s:SetTabName(<args>)
+command! TabNoName call s:RemoveTabName()
+
+
+
+
+
+"set statusline=%<\ %n:%f\ %m%r%y%=%-35.(line:\ %l\ of\ %L,\ col:\ %c%V\ (%P)%)
+set laststatus=2  " always show statusline
+
+" python from powerline.vim import setup as powerline_setup
+" python powerline_setup()
+" python del powerline_setup
+" 
+" let g:Powerline_symbols = 'fancy'
+
+" http://stackoverflow.com/questions/4256697/vim-search-and-highlight-but-do-not-jump
+" Put word under cursor into search register and highlight
+nnoremap <silent> * :let @/='\<<C-R>=expand("<cword>")<CR>\>'<CR>:set hls<CR>
+vnoremap <silent> * :<C-U>
+  \let old_reg=getreg('"')<Bar>let old_regtype=getregtype('"')<CR>
+  \gvy:let @/=substitute(
+  \escape(@", '/\.*$^~['), '\_s\+', '\\_s\\+', 'g')<CR>
+  \gV:call setreg('"', old_reg, old_regtype)<CR>:set hls<CR>
+
+
+
+"crontab shit for OS X
+au BufEnter /private/tmp/crontab.* setl backupcopy=yes
+
+
+" Markdown
+autocmd Filetype markdown setlocal tabstop=4 shiftwidth=4 expandtab
+
+"" Netrw
+let g:netrw_liststyle= 4  " tree view by default (change with `i`)

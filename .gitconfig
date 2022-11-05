@@ -1,0 +1,164 @@
+# [user]
+# 	name = lajarre
+# 	email = alexandre.hajjar@gmail.com
+
+[core]
+  editor = vim
+  pager = less -R
+	excludesfile = ~/.gitglobalignore
+	autocrlf = input
+	precomposeunicode = true
+	quotepath = false
+
+[color]
+  branch = auto
+  diff = auto
+  status = auto
+	ui = true
+
+[color "branch"]
+  current = yellow reverse
+  local = yellow
+  remote = green
+
+[color "diff"]
+  meta = yellow bold
+  frag = magenta bold
+  old = red bold
+  new = green bold
+
+[color "status"]
+  added = yellow
+  changed = green
+  untracked = cyan
+
+[credential]
+	helper = osxkeychain
+
+[push]
+	default = simple
+
+[help]
+	autocorrect = 1
+
+[alias]
+  ls = ls-files
+  s = status
+  st = status
+  ci = commit
+  cia = commit --amend
+  b = "!git --no-pager branch --sort=-committerdate"
+  co = checkout
+  d = diff
+  ds = diff --staged
+  lg = log -p --reverse
+  lgv = log --pretty=format:'%Cred%h%Creset -%C(red)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --reverse
+  lgvv = "!git log --graph --all --format=format:'%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) %C(bold green)(%ar)%C(reset)%C(bold red)%d%C(reset)%n''          %C(black)%s%C(reset) %C(bold black)— %an%C(reset)' --abbrev-commit --color | tac | tr '\\\\/' '/\\\\'"
+  origlog = log --name-status ORIG_HEAD.. --reverse
+  origdiff = diff ORIG_HEAD..
+  rmrmd = !bash -c 'git rm $(git ls-files -d)'
+  a = add -p
+  rsp = restore --staged -p
+  m = merge
+  ma = merge --abort
+  r = rebase
+  ri = rebase --interactive
+  rc = rebase --continue
+  ra = rebase --abort
+  cb = branch --show-current
+
+  forcemoveto = "!git checkout $1 && git branch -f @{-1} && git checkout @{-1}"
+
+  gonebranches = "!git remote prune origin && git branch -vv | grep ': gone]' | awk '{print $1}'"
+  noremotebranches = "!git remote prune origin && git branch -vv | grep ': gone]' | awk '{print $1}'"
+  
+  archivebranch = "!f(){ \
+    set -e; \
+    [ -z \"$1\" ] && { echo Usage: git archivebranch BRANCH_NAME; exit 1; }; \
+    branch=$(git rev-parse --abbrev-ref \"$1\"); \
+    [ \"$branch\" = 'master' ] && { echo \"Don't archive master.\"; exit 1; }; \
+    [ \"$branch\" = 'main' ] && { echo \"Don't archive main.\"; exit 1; }; \
+    worktrees=$(git worktree list | grep -E '\\[\"$branch\"\\]' | cut -d ' ' -f 1); \
+    [ \"$worktrees\" = '' ] || echo \"$worktrees\" | xargs -n1 git worktree remove; \
+    origin_url=$(git remote get-url origin); \
+    if [ ${origin_url:0:14} = 'git@github.com' ]; \
+    then \
+      repo=$(echo ${origin_url:15} | sed 's/.git$//' ); \
+      echo \"Checking if branch is used in some github pulls\"; \
+      github_opened_prs_based=$(gh pr list --repo $repo --state open --base $branch); \
+      if [ \"$(echo $github_opened_prs_based | grep -v \"^$\" | wc -l)\" != \"0\" ]; \
+      then \
+        echo gh pr list --repo $repo --state open --base $branch; \
+        echo \"Branch $branch is the base of pull-requests on your origin Github repository.\nFirst change the following pulls bases:\"; \
+        echo $github_opened_prs_based | cut -f 1 | xargs -I {} echo \"https://github.com/$repo/pull/{}\"; \
+        exit 1; \
+      else \
+        echo \"Tagging archive/$branch\"; \
+        git tag archive/$branch $branch || true; \
+        echo \"Force-deleting branch $branch\"; \
+        git branch -D $branch || true; \
+        echo \"Deleting the branch in origin\"; \
+        git push origin :$branch; \
+      fi \
+    else \
+      echo \"Tagging archive/$branch\"; \
+      git tag archive/$branch $branch || true; \
+      echo \"Force-deleting branch $branch\"; \
+      git branch -D $branch; \
+    fi \
+    }; f "
+
+  publish = "!f(){\
+    set -e; \
+    branch_name=$(git rev-parse --abbrev-ref HEAD); \
+    git push -u origin $branch_name; \
+    }; f "
+  pub = "!f(){ git publish \"$@\"; }; f"  # direct aliases don't work for complex aliases
+
+  # sync current branch
+  sync = "!f(){\
+    set -e; \
+    git stash --include-untracked; \
+    git pull --rebase; \
+    git push; \
+    git stash pop; \
+    }; f "
+
+  # set upstream on existing branch
+  setupstream = "!f(){\
+    set -e; \
+    branch_name=$(git rev-parse --abbrev-ref HEAD); \
+    git branch --set-upstream-to=origin/$branch_name $branch_name; \
+    }; f "
+	logr = !git log --graph --simplify-by-decoration --color | tac
+
+  # # switch to another branch, stashing in between
+  # switch = "!f(){\
+  #   set -e; \
+  #   [ -z \"$1\" ] && { echo Usage: git switch BRANCH_NAME; exit 1; }; \
+  #   branch=\"$1\"; \
+  #   [ \"$branch\" = '-' ] || git rev-parse --verify --quiet $branch || { echo \"Branch $branch doesn't exist\"; exit 1; }; \
+  #   echo \"Switching to branch $branch\"; \
+  #   git stash --include-untracked; \
+  #   git checkout $branch; \
+  #   [ \"$branch\" = '-' ] && branch=$(git rev-parse --abbrev-ref HEAD) \
+  #   stash=$(git stash list | grep \"WIP on ${branch}:\" | grep -oE '^stash[^:]+' | head -n1); \
+  #   [ -n \"$stash\" ] && git stash pop $stash; \
+  #   }; f "
+  # sw = "!f(){ git switch \"$@\"; }; f"  # direct aliases don't work for complex aliases
+
+[merge]
+  conflictstyle = diff3
+
+[diff "bin"]
+  textconv = hexdump -v -C
+
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[diff]
+	wsErrorHighlight = all
+[init]
+	defaultBranch = main
