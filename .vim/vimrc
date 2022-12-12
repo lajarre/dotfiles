@@ -41,8 +41,8 @@ Plug 'TovarishFin/vim-solidity', { 'for': ['solidity'] }
 " let g:syntastic_error_symbol = '✗'
 " let g:syntastic_warning_symbol = '!'
 " let g:syntastic_javascript_checkers = ['eslint']
-" let g:syntastic_always_populate_loc_list = 1  " for :lnext to work (``[l`` w/ unimpaired)
-" let g:syntastic_python_checkers=['flake8', 'pylint']  " removed --rcfile ~/.pylintrc because was crashing vim
+" let g:syntastic_always_populate_loc_list = 1   for :lnext to work (``[l`` w/ unimpaired)
+" let g:syntastic_python_checkers=['flake8', 'pylint']   removed --rcfile ~/.pylintrc because was crashing vim
 
 Plug 'dense-analysis/ale'
 let g:ale_linters = {
@@ -74,6 +74,9 @@ nmap <silent> <C-j> <Plug>(ale_next_wrap)
 let g:ale_python_auto_pipenv = 1
 let g:ale_pattern_options = { '.direnv': { 'ale_fixers': [] }, 'node_modules': { 'ale_fixers': [] } }
 let g:ale_haskell_ghc_options = '-fno-code -v0 -isrc'
+"let g:ale_sign_error = "🛑"
+"let g:ale_sign_warning = "⚠️"
+"let g:ale_sign_info = "ℹ"
 
 Plug 'elzr/vim-json', { 'for': 'json' }
 
@@ -119,10 +122,16 @@ Plug 'hynek/vim-python-pep8-indent', { 'for': 'python' }
 Plug 'Rykka/doctest.vim', { 'for': 'python' }
 
 "Typescript
-Plug 'Quramy/tsuquyomi'
-let g:tsuquyomi_completion_detail = 1
-autocmd FileType typescript setlocal completeopt+=menu,preview
-autocmd FileType typescript nmap <buffer> <Leader>t :<C-u>echo tsuquyomi#hint()<CR>
+"Plug 'Quramy/tsuquyomi'
+"let g:tsuquyomi_completion_detail = 1
+"autocmd FileType typescript setlocal completeopt+=menu,preview
+"autocmd FileType typescript nmap <buffer> <Leader>t :<C-u>echo tsuquyomi#hint()<CR>
+
+"Svelte
+Plug 'othree/html5.vim'
+Plug 'pangloss/vim-javascript'
+Plug 'evanleck/vim-svelte', {'branch': 'main'}
+let g:svelte_preprocessors = ['typescript']
 
 "Haskell
 Plug 'neovimhaskell/haskell-vim'
@@ -203,30 +212,30 @@ if $TERM == "xterm-256color" || $TERM == "screen-256color" || $COLORTERM == "gno
 endif
 " 👓 https://arslan.io/2021/02/15/automatic-dark-mode-for-terminal-applications/
 " Approach dropped.
-function! _UpdateBackground(invert)
+function! _UpdateBackground(toggle)
   if $VIM_THEME == "hacking"
     set background=dark
     colorscheme slate
+    return
+  endif
+    
+  let hour = str2nr(strftime('%H'))
+  let nighttime = (hour < 8) || (hour >= 18)
+  if a:toggle && &background == "light" || !a:toggle && nighttime
+    set background=dark   " for the dark version of the theme
+    colorscheme onehalfdark
   else
-    let hour = str2nr(strftime('%H'))
-    let hourTest = (hour < 8) || (hour >= 18)
-    if hourTest || a:invert
-      set background=dark   " for the dark version of the theme
-      colorscheme onehalfdark
+    set background=light  " for the light version of the theme
+    if $VIM_THEME == "writing"
+      colorscheme calmar256-light
     else
-      set background=light  " for the light version of the theme
-      if $VIM_THEME == "writing"
-        colorscheme calmar256-light
-      else
-        colorscheme onehalflight
-        hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
-      endif
+      colorscheme onehalflight
+      hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
     endif
   endif
 endfunction
 call _UpdateBackground(0)
-command BkgUpdate :call _UpdateBackground(0)
-command BkgRevert :call _UpdateBackground(1)
+command BkgToggle :call _UpdateBackground(1)
 
 "" Color
 " Change colorscheme
