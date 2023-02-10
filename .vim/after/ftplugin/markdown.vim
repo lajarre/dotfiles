@@ -1,2 +1,2 @@
-setlocal textwidth=100
+setlocal textwidth=80
 setlocal conceallevel=2

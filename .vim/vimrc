@@ -20,30 +20,8 @@ Plug 'baeuml/summerfruit256.vim'
 Plug 'vim-scripts/calmar256-lightdark.vim'
 Plug 'sonph/onehalf', {'rtp': 'vim/'}
 
-" [ARCHIVE]
-" Plug 'nathanaelkane/vim-indent-guides'
-" let g:indent_guides_start_level=2
-" let g:indent_guides_guide_size=1
-" hi IndentGuidesOdd ctermbg=darkgrey
-" hi IndentGuidesEven ctermbg=darkgrey
-
 "Solidity (ethereum) syntax
-"Plug 'tomlion/vim-solidity', { 'for': ['solidity'] }
-"Plug 'TovarishFin/vim-solidity', { 'for': ['solidity'] }
 Plug 'thesis/vim-solidity', { 'for': ['solidity'] }
-
-""Load the local eslint and not the global one (through `npm bin`)
-"Plug 'mtscout6/syntastic-local-eslint.vim', { 'commit': '3700f01459b9532ead77874f8910bf0499e2461c', 'for': ['javascript', 'javascript.jsx', 'jsx'] }
-
-"Syntax checking for lots of filetypes
-" Plug 'vim-syntastic/syntastic', { 'on':  'SyntasticToggleMode' }
-" nmap <leader>S :SyntasticToggleMode<CR>
-" let g:syntastic_mode_map = {'mode': 'passive'}
-" let g:syntastic_error_symbol = '✗'
-" let g:syntastic_warning_symbol = '!'
-" let g:syntastic_javascript_checkers = ['eslint']
-" let g:syntastic_always_populate_loc_list = 1   for :lnext to work (``[l`` w/ unimpaired)
-" let g:syntastic_python_checkers=['flake8', 'pylint']   removed --rcfile ~/.pylintrc because was crashing vim
 
 Plug 'dense-analysis/ale'
 let g:ale_linters = {
@@ -119,15 +97,6 @@ Plug 'psf/black', { 'for': 'python', 'branch': 'stable' }
 "python-pep8-indent: good indent
 Plug 'hynek/vim-python-pep8-indent', { 'for': 'python' }
 
-"python doctests
-Plug 'Rykka/doctest.vim', { 'for': 'python' }
-
-"Typescript
-"Plug 'Quramy/tsuquyomi'
-"let g:tsuquyomi_completion_detail = 1
-"autocmd FileType typescript setlocal completeopt+=menu,preview
-"autocmd FileType typescript nmap <buffer> <Leader>t :<C-u>echo tsuquyomi#hint()<CR>
-
 "Svelte
 Plug 'othree/html5.vim'
 Plug 'pangloss/vim-javascript'
@@ -141,18 +110,11 @@ Plug 'neovimhaskell/haskell-vim'
 "for what's visually selected
 Plug 'bronson/vim-visual-star-search'
 
-"[ARCHIVE]
 "Tagbar
 "Pane with current file code structure
 Plug 'preservim/tagbar'
 nnoremap <silent> <F4> :TagbarToggle<CR>
 let g:tagbar_left = 1
-
-"Status bar
-"Plug 'vim-airline/vim-airline'
-"let g:airline_powerline_fonts = 1
-" disabled for causing weird chars in output
-"let g:airline#extensions#tagbar#enabled = 0
 
 "Kwbd
 "Delete current buffer and show the one after, without shutting the current
@@ -246,26 +208,6 @@ endfunction
 call _UpdateBackground(0)
 command BkgToggle :call _UpdateBackground(1)
 
-"" Color
-" Change colorscheme
-"command ThemeDark set background=dark | colorscheme oceandeep
-"command ThemeLight set background=light | colorscheme summerfruit256 | hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
-"command ThemeWritingLight set background=light | colorscheme calmar256-light
-"if $VIM_THEME == "hacking"
-"  ThemeDark
-"  " set background=dark
-"  " colorscheme oceandeep
-"elseif $VIM_THEME == "writing"
-"  ThemeWritingLight
-"  " set background=light
-"  " colorscheme calmar256-light
-"else
-"  ThemeLight
-"  "set background=light 
-"  "colorscheme summerfruit256
-"  "hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
-"endif
-
 " Cursor
 if $TERM_PROGRAM =~ "iTerm"
   let &t_SI = "\<Esc>]50;CursorShape=1\x7" " Vertical bar in insert mode
@@ -309,17 +251,6 @@ set tw=80
 autocmd FileType html setlocal tw=0
 autocmd FileType htmldjango setlocal tw=0
 autocmd FileType text setlocal tw=0
-" higlight code when too far
-"highlight OverLength ctermbg=darkred ctermfg=white guibg=#FFD9D9
-"match OverLength /\%>80v.\+/
-"match ErrorMsg '\%>80v.\+'
-
-
-" colorcolumn
-"set cc=+1
-"highlight ColorColumn ctermbg=0
-""
-
 
 "" Writing and moving
 
