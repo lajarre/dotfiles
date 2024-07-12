@@ -32,6 +32,7 @@ let g:ale_linters = {
 \   'python': ['pylint'],
 \   'haskell': ['hlint', 'ghc'],
 \   'solidity': ['solhint'],
+\   'rust': ['cargo', 'analyzer'],
 \}
 let g:ale_fixers = {
 \   'javascript': ['prettier'],
@@ -50,12 +51,22 @@ let g:ale_fix_on_save = 1
 let g:ale_set_highlights = 0
 nmap <silent> <C-k> <Plug>(ale_previous_wrap)
 nmap <silent> <C-j> <Plug>(ale_next_wrap)
+let g:ale_completion_enabled = 1
 let g:ale_python_auto_pipenv = 1
 let g:ale_pattern_options = { '.direnv': { 'ale_fixers': [] }, 'node_modules': { 'ale_fixers': [] } }
 let g:ale_haskell_ghc_options = '-fno-code -v0 -isrc'
 "let g:ale_sign_error = "🛑"
 "let g:ale_sign_warning = "⚠️"
 "let g:ale_sign_info = "ℹ"
+let ale_rust_cargo_check_all_targets = 1
+let g:ale_rust_cargo_use_clippy = executable('cargo-clippy')
+let g:ale_rust_rls_config = {
+	\ 'rust': {
+		\ 'all_targets': 1,
+		\ 'clippy_preference': 'on'
+	\ }
+\ }
+let g:ale_rust_rls_toolchain = 'stable'
 
 Plug 'elzr/vim-json', { 'for': 'json' }
 
@@ -105,6 +116,11 @@ let g:svelte_preprocessors = ['typescript']
 
 "Haskell
 Plug 'neovimhaskell/haskell-vim'
+
+" Rust
+Plug 'rust-lang/rust.vim'
+let g:rustfmt_autosave = 1
+let g:rustfmt_fail_silently = 0
 
 "vim-visual-star-search: select visually, and press * or \* to search excactly
 "for what's visually selected
@@ -161,7 +177,8 @@ Plug 'tpope/vim-obsession'
 
 " LaTex
 Plug 'lervag/vimtex', { 'for': ['tex'] }
-let g:vimtex_compiler_method = 'tectonic'
+let g:vimtex_compiler_method = 'latexmk'
+let g:vimtex_compiler_latexmk = { 'continuous' : 1 }
 
 " Snippets
 Plug 'SirVer/ultisnips'
@@ -194,13 +211,13 @@ function! _UpdateBackground(toggle)
   let nighttime = (hour < 8) || (hour >= 18)
   if a:toggle && &background == "light" || !a:toggle && nighttime
     set background=dark   " for the dark version of the theme
-    colorscheme onehalfdark
+    colorscheme slate
   else
     set background=light  " for the light version of the theme
     if $VIM_THEME == "writing"
       colorscheme calmar256-light
     else
-      colorscheme onehalflight
+      colorscheme summerfruit256
       hi CursorLine cterm=none gui=none ctermbg=195 guibg=#d7ffff
     endif
   endif
@@ -218,8 +235,6 @@ endif
 "" Visual stuff
 " Cursor line highlight
 set cursorline
-" Turn on line numbering. Turn it off with set nonu 
-set nu 
 " Show line and column number
 set ruler
 " Make the window title reflect the file being edited
@@ -234,8 +249,26 @@ set wildignore=*.swp,*.bak,*.pyc,*.class
 " Mucho
 set history=1000
 set undolevels=1000
+" Persist undoes acc
+set undodir=~/.vim/undodir
+set undofile
 " number of cols for the line numbers
 set numberwidth=3
+" Relative line numbers
+set relativenumber
+" Also show current absolute line
+set number
+""
+
+""
+" Diffs:
+" Use vertical diff
+set diffopt+=vertical
+" No whitespace in vimdiff
+set diffopt+=iwhite 
+" Make diffing better: https://vimways.org/2018/the-power-of-diff/
+set diffopt+=algorithm:patience
+set diffopt+=indent-heuristic
 ""
 
 "" Backup and swaps
@@ -254,6 +287,7 @@ autocmd FileType text setlocal tw=0
 
 "" Writing and moving
 
+inoremap <C-D> <Del>
 " allow backspacing over everything in insert mode
 set backspace=indent,eol,start                      
 " arrows
@@ -285,6 +319,12 @@ set smartcase
 set noincsearch
 " highlight search terms
 set hlsearch
+" Search results centered please
+nnoremap <silent> n nzz
+nnoremap <silent> N Nzz
+nnoremap <silent> * *zz
+nnoremap <silent> # #zz
+nnoremap <silent> g* g*zz
 ""
 
 "" Menus
@@ -316,13 +356,15 @@ aug END
 
 " Yaml
 au! BufNewFile,BufReadPost *.{yaml,yml} set filetype=yaml foldmethod=indent
-autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
 
 
 " formatoptions
 set formatoptions-=to formatoptions+=crql
 
 ""
+" Navigate through cmd history based on start of line
+cnoremap <C-p> <Up>
+cnoremap <C-n> <Down>
 
 
 "" 
@@ -413,8 +455,6 @@ autocmd BufReadPost *
   \   exe "normal! g`\"" |
   \ endif
 
-" Use vertical diff
-set diffopt+=vertical
 
 " Convenient command to see the difference between the current buffer and the
 " file it was loaded from, thus the changes you made.                         

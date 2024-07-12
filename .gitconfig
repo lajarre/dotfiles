@@ -45,7 +45,7 @@
   ls = ls-files
   s = status
   st = status
-  ci = commit
+  ci = !git diff --cached --name-only | xargs grep -n '\\[XXX\\]' > /dev/null && echo "🛑 [XXX] found in staged files. Fix before committing." && git diff --cached --name-only | xargs grep -n '\\[XXX\\]' || git commit
   cia = commit --amend
   b = !git --no-pager branch --sort=-committerdate
   co = checkout
@@ -87,7 +87,7 @@
       repo=$(echo ${origin_url:15} | sed 's/.git$//' ); \
       echo \"Checking if branch is used in some github pulls\"; \
       github_opened_prs_based=$(gh pr list --repo $repo --state open --base $branch); \
-      if [ \"$(echo $github_opened_prs_based | grep -v \"^$\" | wc -l)\" != \"0\" ]; \
+      if [ \"$(echo $github_opened_prs_based | grep -v \"^$\" | wc -l | xargs)\" != \"0\" ]; \
       then \
         echo gh pr list --repo $repo --state open --base $branch; \
         echo \"Branch $branch is the base of pull-requests on your origin Github repository.\nFirst change the following pulls bases:\"; \
@@ -139,6 +139,15 @@
     | fzf --multi --preview='git lg {}' \
     | xargs -I% git \"$@\" % ; \
     }; f "
+
+  configdefault = "!f(){\
+    git config user.email 'alexandre.hajjar@gmail.com'; \
+    git config user.name lajarre; \
+    git config commit.gpgsign true; \
+    git config user.signingkey C548AAEE285265BE; \
+  }; f "
+
+
 
   # # switch to another branch, stashing in between
   # switch = "!f(){\
