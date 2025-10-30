@@ -1,0 +1,95 @@
+#compdef termcolor
+
+# Zsh completion for termcolor command
+
+_termcolor() {
+    local -a colors
+    colors=(
+        # Dark pastels
+        'slate'
+        'charcoal'
+        'midnight'
+        'forest'
+        'wine'
+        'plum'
+        'navy'
+        'teal'
+        'chocolate'
+        'maroon'
+        'indigo'
+        'olive'
+        'steel'
+        'burgundy'
+        'pine'
+
+        # Light pastels
+        'powder-blue'
+        'peach'
+        'lavender'
+        'mint'
+        'blush'
+        'cream'
+        'sky'
+        'lilac'
+        'honeydew'
+        'salmon'
+        'vanilla'
+        'periwinkle'
+        'champagne'
+        'pearl'
+        'seafoam'
+
+        # Medium pastels
+        'sage'
+        'dusty-rose'
+        'mauve'
+        'ash'
+        'taupe'
+        'moss'
+        'dusk'
+        'clay'
+        'sand'
+        'stone'
+
+        # Grays
+        'gray'
+        'grey'
+        'light-gray'
+        'light-grey'
+        'dark-gray'
+        'dark-grey'
+        'silver'
+
+        # Classic pastels
+        'pastel-pink'
+        'pastel-blue'
+        'pastel-green'
+        'pastel-yellow'
+        'pastel-purple'
+        'pastel-orange'
+
+        # Special
+        'black'
+        'white'
+        'off-white'
+    )
+
+    local -a options
+    options=(
+        '--list'
+        '-l'
+    )
+
+    _arguments -C \
+        '1: :->color_or_option' \
+        && return 0
+
+    case $state in
+        color_or_option)
+            compadd -a colors
+            compadd -a options
+            ;;
+    esac
+}
+
+_termcolor "$@"

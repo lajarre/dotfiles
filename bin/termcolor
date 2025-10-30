@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+
+# Terminal background color setter using English color names
+# Usage: termcolor <color-name>
+
+declare -A colors
+
+# Dark pastel colors (muted, darker tones)
+colors[slate]="#4A5568"
+colors[charcoal]="#2D3748"
+colors[midnight]="#1A365D"
+colors[forest]="#22543D"
+colors[wine]="#742A2A"
+colors[plum]="#553555"
+colors[navy]="#2C5282"
+colors[teal]="#234E52"
+colors[chocolate]="#5D4037"
+colors[maroon]="#7B341E"
+colors[indigo]="#434190"
+colors[olive]="#3D4526"
+colors[steel]="#475569"
+colors[burgundy]="#6B2737"
+colors[pine]="#264E36"
+
+# Light pastel colors (soft, lighter tones)
+colors[powder-blue]="#B0E0E6"
+colors[peach]="#FFDAB9"
+colors[lavender]="#E6E6FA"
+colors[mint]="#C7F0DB"
+colors[blush]="#FFE4E1"
+colors[cream]="#FFFDD0"
+colors[sky]="#87CEEB"
+colors[lilac]="#DDA0DD"
+colors[honeydew]="#F0FFF0"
+colors[salmon]="#FFB6C1"
+colors[vanilla]="#F3E5AB"
+colors[periwinkle]="#CCCCFF"
+colors[champagne]="#F7E7CE"
+colors[pearl]="#FFF8DC"
+colors[seafoam]="#B0E5D3"
+
+# Medium pastel colors
+colors[sage]="#87A96B"
+colors[dusty-rose]="#C08081"
+colors[mauve]="#B784A7"
+colors[ash]="#B2BEB5"
+colors[taupe]="#8B7D6B"
+colors[moss]="#8A9A5B"
+colors[dusk]="#8E7F9F"
+colors[clay]="#B87333"
+colors[sand]="#C2B280"
+colors[stone]="#918C7E"
+
+# Grays
+colors[gray]="#808080"
+colors[grey]="#808080"
+colors[light-gray]="#D3D3D3"
+colors[light-grey]="#D3D3D3"
+colors[dark-gray]="#404040"
+colors[dark-grey]="#404040"
+colors[silver]="#C0C0C0"
+
+# Classic pastels
+colors[pastel-pink]="#FFD1DC"
+colors[pastel-blue]="#AEC6CF"
+colors[pastel-green]="#B2D8B2"
+colors[pastel-yellow]="#FDFD96"
+colors[pastel-purple]="#CBAACB"
+colors[pastel-orange]="#FFCC99"
+
+# Special colors
+colors[black]="#000000"
+colors[white]="#FFFFFF"
+colors[off-white]="#FAF9F6"
+
+# Function to show available colors
+show_colors() {
+    echo "Available colors:"
+    echo
+    echo "Dark pastels:"
+    echo "  slate, charcoal, midnight, forest, wine, plum, navy, teal,"
+    echo "  chocolate, maroon, indigo, olive, steel, burgundy, pine"
+    echo
+    echo "Light pastels:"
+    echo "  powder-blue, peach, lavender, mint, blush, cream, sky, lilac,"
+    echo "  honeydew, salmon, vanilla, periwinkle, champagne, pearl, seafoam"
+    echo
+    echo "Medium pastels:"
+    echo "  sage, dusty-rose, mauve, ash, taupe, moss, dusk, clay, sand, stone"
+    echo
+    echo "Grays:"
+    echo "  gray/grey, light-gray/light-grey, dark-gray/dark-grey, silver"
+    echo
+    echo "Classic pastels:"
+    echo "  pastel-pink, pastel-blue, pastel-green, pastel-yellow,"
+    echo "  pastel-purple, pastel-orange"
+    echo
+    echo "Special:"
+    echo "  black, white, off-white"
+}
+
+# Function to set terminal background color
+set_color() {
+    local color_name="$1"
+    local color_hex="${colors[$color_name]}"
+
+    if [[ -z "$color_hex" ]]; then
+        echo "Error: Unknown color '$color_name'"
+        echo
+        show_colors
+        exit 1
+    fi
+
+    # OSC 11 sequence to set terminal background color
+    echo -ne "\033]11;$color_hex\007"
+    echo "Terminal background set to: $color_name ($color_hex)"
+}
+
+# Main logic
+if [[ $# -eq 0 ]]; then
+    echo "Usage: termcolor <color-name>"
+    echo "       termcolor --list"
+    echo
+    echo "Examples:"
+    echo "  termcolor mint"
+    echo "  termcolor dark-grey"
+    echo "  termcolor pastel-blue"
+    exit 1
+fi
+
+if [[ "$1" == "--list" ]] || [[ "$1" == "-l" ]]; then
+    show_colors
+    exit 0
+fi
+
+# Convert to lowercase for case-insensitive matching
+color_name="${1,,}"
+
+set_color "$color_name"
