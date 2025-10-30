@@ -1,6 +1,5 @@
-# [user]
-# 	name = lajarre
-# 	email = alexandre.hajjar@gmail.com
+[include]
+  path = ~/.gitconfig.local
 
 [core]
   editor = vim
@@ -45,8 +44,9 @@
   ls = ls-files
   s = status
   st = status
-  ci = !git diff --cached --name-only | xargs grep -n '\\[XXX\\]' > /dev/null && echo "🛑 [XXX] found in staged files. Fix before committing." && git diff --cached --name-only | xargs grep -n '\\[XXX\\]' || git commit
+  ci = "!staged_files=$(git diff --cached --name-only) && if [ -z \"$staged_files\" ]; then echo '🔴 No files staged. Commit aborted.'; exit 1; fi && echo \"$staged_files\" | xargs grep -n '\\[XXX\\]' > /dev/null && echo '🛑 [XXX] found in staged files. Fix before committing.' && echo \"$staged_files\" | xargs grep -n '\\[XXX\\]' || git commit"
   cia = commit --amend
+  cias = commit --amend --no-edit --sign
   b = !git --no-pager branch --sort=-committerdate
   co = checkout
   d = diff
@@ -59,6 +59,7 @@
   origdiff = diff ORIG_HEAD..
   rmrmd = !bash -c 'git rm $(git ls-files -d)'
   a = add -p
+  rs = restore --staged -p
   rsp = restore --staged -p
   m = merge
   ma = merge --abort
@@ -72,42 +73,6 @@
 
   gonebranches = "!git remote prune origin && git branch -vv | grep ': gone]' | awk '{print $1}'"
   noremotebranches = "!git remote prune origin && git branch -vv | grep ': gone]' | awk '{print $1}'"
-  
-  archivebranch = "!f(){ \
-    set -e; \
-    [ -z \"$1\" ] && { echo Usage: git archivebranch BRANCH_NAME; exit 1; }; \
-    branch=$(git rev-parse --abbrev-ref \"$1\"); \
-    [ \"$branch\" = 'master' ] && { echo \"Don't archive master.\"; exit 1; }; \
-    [ \"$branch\" = 'main' ] && { echo \"Don't archive main.\"; exit 1; }; \
-    worktrees=$(git worktree list | grep -E '\\[\"$branch\"\\]' | cut -d ' ' -f 1); \
-    [ \"$worktrees\" = '' ] || echo \"$worktrees\" | xargs -n1 git worktree remove; \
-    origin_url=$(git remote get-url origin); \
-    if [ ${origin_url:0:14} = 'git@github.com' ]; \
-    then \
-      repo=$(echo ${origin_url:15} | sed 's/.git$//' ); \
-      echo \"Checking if branch is used in some github pulls\"; \
-      github_opened_prs_based=$(gh pr list --repo $repo --state open --base $branch); \
-      if [ \"$(echo $github_opened_prs_based | grep -v \"^$\" | wc -l | xargs)\" != \"0\" ]; \
-      then \
-        echo gh pr list --repo $repo --state open --base $branch; \
-        echo \"Branch $branch is the base of pull-requests on your origin Github repository.\nFirst change the following pulls bases:\"; \
-        echo $github_opened_prs_based | cut -f 1 | xargs -I {} echo \"https://github.com/$repo/pull/{}\"; \
-        exit 1; \
-      else \
-        echo \"Tagging archive/$branch\"; \
-        git tag archive/$branch $branch || true; \
-        echo \"Force-deleting branch $branch\"; \
-        git branch -D $branch || true; \
-        echo \"Deleting the branch in origin\"; \
-        git push origin :$branch; \
-      fi \
-    else \
-      echo \"Tagging archive/$branch\"; \
-      git tag archive/$branch $branch || true; \
-      echo \"Force-deleting branch $branch\"; \
-      git branch -D $branch; \
-    fi \
-    }; f "
 
   publish = "!f(){\
     set -e; \
@@ -115,6 +80,7 @@
     git push -u origin $branch_name; \
     }; f "
   pub = "!f(){ git publish \"$@\"; }; f"  # direct aliases don't work for complex aliases
+	pushversions = !git tag -l \"v*\" | xargs -n 1 git push origin
 
   # sync current branch
   sync = "!f(){\
@@ -136,33 +102,12 @@
     git branch \
     | grep --invert-match '\\*' \
     | cut -c 3- \
-    | fzf --multi --preview='git lg {}' \
+    | fzf --multi --height 40% --layout=reverse \
+          --preview='git --no-pager lg {}' \
+          --preview-window='right:80%:wrap:follow' \
+          --bind 'pgup:preview-page-up,pgdn:preview-page-down,ctrl-j:preview-down,ctrl-k:preview-up' \
     | xargs -I% git \"$@\" % ; \
     }; f "
-
-  configdefault = "!f(){\
-    git config user.email 'alexandre.hajjar@gmail.com'; \
-    git config user.name lajarre; \
-    git config commit.gpgsign true; \
-    git config user.signingkey C548AAEE285265BE; \
-  }; f "
-
-
-
-  # # switch to another branch, stashing in between
-  # switch = "!f(){\
-  #   set -e; \
-  #   [ -z \"$1\" ] && { echo Usage: git switch BRANCH_NAME; exit 1; }; \
-  #   branch=\"$1\"; \
-  #   [ \"$branch\" = '-' ] || git rev-parse --verify --quiet $branch || { echo \"Branch $branch doesn't exist\"; exit 1; }; \
-  #   echo \"Switching to branch $branch\"; \
-  #   git stash --include-untracked; \
-  #   git checkout $branch; \
-  #   [ \"$branch\" = '-' ] && branch=$(git rev-parse --abbrev-ref HEAD) \
-  #   stash=$(git stash list | grep \"WIP on ${branch}:\" | grep -oE '^stash[^:]+' | head -n1); \
-  #   [ -n \"$stash\" ] && git stash pop $stash; \
-  #   }; f "
-  # sw = "!f(){ git switch \"$@\"; }; f"  # direct aliases don't work for complex aliases
 
 [merge]
   conflictstyle = diff3
@@ -179,3 +124,5 @@
 	wsErrorHighlight = all
 [init]
 	defaultBranch = main
+[gpg]
+	format = ssh

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
+#
+# termcolor - Terminal background color setter using English color names
+#
+# Changes terminal background color using OSC 11 escape sequences.
+# Works with iTerm2, xterm, and most modern terminal emulators.
 
-# Terminal background color setter using English color names
-# Usage: termcolor <color-name>
+set -euo pipefail
 
 declare -A colors
 
@@ -73,6 +77,44 @@ colors[black]="#000000"
 colors[white]="#FFFFFF"
 colors[off-white]="#FAF9F6"
 
+# Function to display usage information
+usage() {
+    cat << 'EOF'
+termcolor - Change terminal background color using English color names
+
+USAGE:
+    termcolor <color-name>
+    termcolor --list | -l
+    termcolor --help | -h
+
+OPTIONS:
+    -h, --help      Show this help message
+    -l, --list      List all available colors
+
+EXAMPLES:
+    termcolor mint              # Set background to mint green
+    termcolor charcoal          # Set background to dark gray
+    termcolor pastel-blue       # Set background to pastel blue
+
+DESCRIPTION:
+    Changes the terminal background color using OSC 11 escape sequences.
+    The color persists until changed again or the terminal is reset.
+
+    Includes curated pastel color palettes:
+    - Dark pastels: charcoal, midnight, forest, wine, navy, etc.
+    - Light pastels: mint, peach, lavender, cream, sky, etc.
+    - Medium pastels: sage, dusty-rose, mauve, ash, etc.
+
+    Run 'termcolor --list' to see all available colors.
+
+NOTES:
+    - Color names are case-insensitive
+    - Works with iTerm2, xterm, and most modern terminal emulators
+    - Does not work with all terminal emulators (e.g., basic Terminal.app may not support OSC 11)
+
+EOF
+}
+
 # Function to show available colors
 show_colors() {
     echo "Available colors:"
@@ -118,14 +160,13 @@ set_color() {
 
 # Main logic
 if [[ $# -eq 0 ]]; then
-    echo "Usage: termcolor <color-name>"
-    echo "       termcolor --list"
-    echo
-    echo "Examples:"
-    echo "  termcolor mint"
-    echo "  termcolor dark-grey"
-    echo "  termcolor pastel-blue"
+    usage
     exit 1
+fi
+
+if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+    usage
+    exit 0
 fi
 
 if [[ "$1" == "--list" ]] || [[ "$1" == "-l" ]]; then

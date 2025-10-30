@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: git killtree <path> [-f|--force]"
+  echo ""
+  echo "Removes a git worktree and optionally deletes its branch."
+  echo ""
+  echo "Arguments:"
+  echo "  <path>      Path to the worktree directory"
+  echo "  -f, --force Force removal of unclean worktree and force-delete branch"
+  echo ""
+  echo "Behavior:"
+  echo "  • Removes worktree at the specified path"
+  echo "  • Without --force: deletes branch only if fully merged (git branch -d)"
+  echo "  • With --force: removes dirty worktree and force-deletes branch (git branch -D)"
+  echo ""
+  echo "Examples:"
+  echo "  git killtree .tree/feature-x        # Remove worktree, delete branch if merged"
+  echo "  git killtree .tree/fix --force      # Force remove worktree and force-delete branch"
+}
+
+# Ensure we're inside a git repository
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Error: not in a git repository" >&2
+  exit 1
+fi
+
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ -z ${1:-} ]]; then
+  usage
+  exit 1
+fi
+
+worktree_path="$1"
+force_flag=""
+
+# Check for force flag
+if [[ ${2:-} == "-f" || ${2:-} == "--force" ]]; then
+  force_flag="--force"
+fi
+
+# Check if worktree directory exists
+if [[ ! -d "$worktree_path" ]]; then
+  echo "Error: worktree directory '$worktree_path' does not exist" >&2
+  exit 1
+fi
+
+# Get the branch name associated with this worktree
+branch_name=$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+if [[ -z "$branch_name" ]]; then
+  echo "Warning: could not determine branch name for worktree" >&2
+fi
+
+# Remove the worktree
+echo "Removing worktree at $worktree_path"
+if [[ -n "$force_flag" ]]; then
+  git worktree remove "$worktree_path" --force
+  echo "✓ Worktree forcibly removed"
+else
+  git worktree remove "$worktree_path"
+  echo "✓ Worktree removed"
+fi
+
+# Delete the branch if we found one
+if [[ -n "$branch_name" && "$branch_name" != "HEAD" ]]; then
+  if [[ -n "$force_flag" ]]; then
+    echo "Force-deleting branch '$branch_name'"
+    git branch -D "$branch_name"
+    echo "✓ Branch '$branch_name' force-deleted"
+  else
+    echo "Deleting branch '$branch_name' (only if merged)"
+    if git branch -d "$branch_name" 2>/dev/null; then
+      echo "✓ Branch '$branch_name' deleted"
+    else
+      echo "✗ Branch '$branch_name' is not fully merged" >&2
+      echo "  Use --force to force-delete the branch" >&2
+      exit 1
+    fi
+  fi
+fi
+
+echo "Done"

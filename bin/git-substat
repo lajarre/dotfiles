@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# git-substat - Show detailed status of all git submodules
+#
+# Displays branch, changes, and file counts for each submodule
+
+set -euo pipefail
+
+usage() {
+  cat << 'EOF'
+git substat - Show detailed status of all git submodules
+
+USAGE:
+    git substat
+    git substat --help | -h
+
+DESCRIPTION:
+    Shows a detailed status report for each submodule including:
+    - Current branch (or "detached" if in detached HEAD state)
+    - Clean/dirty status
+    - Count of untracked, modified, and deleted files
+    - First 5 changes (if any)
+
+EXAMPLES:
+    git substat
+
+OUTPUT:
+    # Submodule Status
+
+    ## [submodule-name] path/to/submodule
+    ✅ Branch: main - clean
+
+    ## [other-submodule] path/to/other
+    🔴 Branch: feature-x
+      - 2 modified files
+      - 1 deleted files
+        M  src/file.js
+        D  old/file.js
+
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Error: not in a git repository" >&2
+  exit 1
+fi
+
+# Check if repository has submodules
+if [[ ! -f .gitmodules ]]; then
+  echo "No submodules found in this repository"
+  exit 0
+fi
+
+echo "# Submodule Status"
+echo
+
+git submodule foreach --quiet '
+  echo "## [$name] $path"
+
+  branch=$(git branch --show-current 2>/dev/null || echo "detached")
+  changes=$(git status -s 2>/dev/null)
+
+  if [ -z "$changes" ]; then
+    echo "✅ Branch: $branch - clean"
+  else
+    untracked=$(echo "$changes" | grep -c "^??" || echo "0")
+    modified=$(echo "$changes" | grep -c "^ M" || echo "0")
+    deleted=$(echo "$changes" | grep -c "^ D" || echo "0")
+
+    echo "🔴 Branch: $branch"
+    [ "$untracked" -gt 0 ] && echo "  - $untracked untracked files"
+    [ "$modified" -gt 0 ] && echo "  - $modified modified files"
+    [ "$deleted" -gt 0 ] && echo "  - $deleted deleted files"
+
+    echo "$changes" | grep -v "^??" | head -5 | sed "s/^/    /"
+
+    remaining=$(echo "$changes" | grep -v "^??" | wc -l | xargs)
+    [ "$remaining" -gt 5 ] && echo "    ... and $((remaining - 5)) more changes"
+  fi
+
+  echo
+'

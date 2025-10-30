@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+#
+# git-archivebranch - Archive a branch by tagging it and deleting it
+#
+# Archives a branch by creating an archive/<branch> tag, removing any
+# associated worktrees, and deleting the branch both locally and remotely.
+# For GitHub repos, checks if the branch is used as a base for open PRs.
+
+set -euo pipefail
+
+usage() {
+  cat << 'EOF'
+git archivebranch - Archive a branch by tagging and deleting it
+
+USAGE:
+    git archivebranch <branch-name>
+    git archivebranch --help | -h
+
+DESCRIPTION:
+    Archives a branch by:
+    1. Creating a tag: archive/<branch-name>
+    2. Removing any worktrees associated with the branch
+    3. Force-deleting the local branch
+    4. Deleting the remote branch (if GitHub origin)
+    5. Checking for open PRs using this branch as base (GitHub only)
+
+EXAMPLES:
+    git archivebranch feature-x
+    git archivebranch old-experiment
+
+NOTES:
+    - Cannot archive 'main' or 'master' branches
+    - For GitHub repos, requires 'gh' CLI if there are open PRs
+    - The tag allows you to restore the branch later if needed:
+      git checkout -b <branch-name> archive/<branch-name>
+
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ -z "${1:-}" ]]; then
+  usage
+  exit 1
+fi
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Error: not in a git repository" >&2
+  exit 1
+fi
+
+branch=$(git rev-parse --abbrev-ref "$1")
+
+# Prevent archiving main branches
+if [[ "$branch" == "master" ]]; then
+  echo "Error: Don't archive master." >&2
+  exit 1
+fi
+
+if [[ "$branch" == "main" ]]; then
+  echo "Error: Don't archive main." >&2
+  exit 1
+fi
+
+# Remove any worktrees associated with this branch
+worktrees=$(git worktree list | grep -E "\\[$branch\\]" | cut -d ' ' -f 1 || true)
+if [[ -n "$worktrees" ]]; then
+  echo "Removing worktrees for branch $branch"
+  echo "$worktrees" | xargs -n1 git worktree remove
+fi
+
+origin_url=$(git remote get-url origin 2>/dev/null || echo "")
+
+# Handle GitHub repos specially
+if [[ "${origin_url:0:14}" == "git@github.com" ]]; then
+  repo=$(echo "${origin_url:15}" | sed 's/.git$//')
+  echo "Checking if branch is used in some github pulls"
+
+  github_opened_prs_based=$(gh pr list --repo "$repo" --state open --base "$branch" 2>/dev/null || echo "")
+
+  if [[ -n "$github_opened_prs_based" ]] && [[ $(echo "$github_opened_prs_based" | grep -v "^$" | wc -l | xargs) != "0" ]]; then
+    echo "Error: Branch $branch is the base of pull-requests on your origin Github repository." >&2
+    echo "First change the following pulls bases:" >&2
+    echo "$github_opened_prs_based" | cut -f 1 | xargs -I {} echo "  https://github.com/$repo/pull/{}"
+    exit 1
+  fi
+
+  echo "Tagging archive/$branch"
+  git tag "archive/$branch" "$branch" || true
+
+  echo "Force-deleting branch $branch"
+  git branch -D "$branch" || true
+
+  echo "Deleting the branch in origin"
+  git push origin ":$branch"
+else
+  echo "Tagging archive/$branch"
+  git tag "archive/$branch" "$branch" || true
+
+  echo "Force-deleting branch $branch"
+  git branch -D "$branch"
+fi
+
+echo "✓ Branch $branch archived successfully"
