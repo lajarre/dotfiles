@@ -126,6 +126,8 @@ def extract_session(filepath: Path, cutoff: datetime | None = None) -> dict | No
     user_msgs = 0
     assistant_msgs = 0
     compactions = []
+    title = None
+    first_user_text = None
     cwd = None
     last_usage = None
 
@@ -147,10 +149,12 @@ def extract_session(filepath: Path, cutoff: datetime | None = None) -> dict | No
                     if last_ts is None or ts > last_ts:
                         last_ts = ts
 
-                # Extract compaction summaries
+                # Extract compaction summaries (first one is the session title)
                 if msg_type == 'summary':
                     summary_text = data.get('summary', '')
                     if summary_text:
+                        if title is None:
+                            title = summary_text
                         compactions.append({
                             'summary': summary_text
                         })
@@ -161,6 +165,22 @@ def extract_session(filepath: Path, cutoff: datetime | None = None) -> dict | No
                 if msg_type == 'user' and not data.get('isMeta'):
                     if in_window:
                         user_msgs += 1
+                    # Extract first user text for fallback title
+                    if first_user_text is None:
+                        content = data.get('message', {}).get('content')
+                        text = None
+                        if isinstance(content, str):
+                            text = content
+                        elif isinstance(content, list):
+                            for item in content:
+                                if isinstance(item, dict) and item.get('type') == 'text':
+                                    text = item.get('text', '')
+                                    break
+                        # Filter noise: too short, XML tags, slash commands, shell commands
+                        if text and len(text) > 10:
+                            if not text.startswith('<'):  # Skip all XML-like content
+                                if not text.startswith(('!', '/', 'echo ', 'ls ', 'cd ')):
+                                    first_user_text = text
                 elif msg_type == 'assistant':
                     if in_window:
                         assistant_msgs += 1
@@ -174,6 +194,14 @@ def extract_session(filepath: Path, cutoff: datetime | None = None) -> dict | No
     # Skip sessions with no activity in window
     if cutoff and user_msgs == 0 and assistant_msgs == 0:
         return None
+
+    # Use first user text as fallback title (truncated)
+    if title is None and first_user_text:
+        # Clean up: first line only, truncate to ~60 chars
+        text = first_user_text.split('\n')[0].strip()
+        if len(text) > 60:
+            text = text[:57] + '...'
+        title = text
 
     # Calculate context usage
     context_tokens = 0
@@ -200,6 +228,7 @@ def extract_session(filepath: Path, cutoff: datetime | None = None) -> dict | No
 
     return {
         'session_id': session_id,
+        'title': title,
         'project': project,
         'cwd': cwd,
         'started': first_ts.isoformat() if first_ts else None,

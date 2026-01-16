@@ -32,7 +32,8 @@ Generate a human-readable recap of recent Claude Code conversations.
 
 ## Sessions
 
-### <project name>
+### 🗨️ "<title>"
+`<project path>`
 - **Session:** `<session_id>`
 - **Time:** <started> → <ended> (<duration>)
 - **Context:** <context_pct>% (<context_tokens> tokens)
@@ -43,6 +44,8 @@ Generate a human-readable recap of recent Claude Code conversations.
 
 **Git commits:**
 <List commits if any, otherwise "None">
+
+If title is null, use project path as heading instead: `### <project path>`
 
 ---
 ```
@@ -57,6 +60,8 @@ Generate a human-readable recap of recent Claude Code conversations.
 
 ## Guidelines
 
+- **Session title** comes from compaction summary, or fallback to first user message (truncated)
+- **Title is null** only for sessions with no meaningful user input (use project name instead)
 - **Compaction summaries** are the primary source for "what was discussed"
 - **Git commits** show concrete output from the session
 - **Context %** indicates session intensity; many compactions = hit context limit
