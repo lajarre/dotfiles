@@ -11,10 +11,12 @@ usage() {
   echo "  [branch-name]  Branch name (defaults to <name>)"
   echo ""
   echo "Behavior:"
+  echo "  • Verifies .tree/ is git-ignored (exits with error if not)"
   echo "  • Creates .tree/ directory if it doesn't exist"
   echo "  • Creates worktree at .tree/<name>"
   echo "  • Creates new branch if it doesn't exist, or uses existing branch"
-  echo "  • Copies .env and .envrc files to the worktree if present"
+  echo "  • Copies .env and .envrc to the worktree if present"
+  echo "  • Symlinks .claude/settings.local.json from repo root (shared)"
   echo ""
   echo "Examples:"
   echo "  git newtree feature-x          # Creates .tree/feature-x with branch 'feature-x'"
@@ -40,9 +42,27 @@ fi
 tree_name="$1"
 branch_name="${2:-$1}"
 
-mkdir -p .tree
+# Determine the repository root to avoid nesting .tree/ inside another worktree
+# git-common-dir points to the main .git directory (or relative path to it)
+git_common_dir=$(git rev-parse --git-common-dir)
+repo_root=$(cd "$(dirname "$git_common_dir")" && pwd)
+# Determine the root of the current worktree (source for config files)
+current_root=$(git rev-parse --show-toplevel)
 
-dest_dir=".tree/$tree_name"
+# Safety check: ensure .tree/ is git-ignored
+if ! git -C "$repo_root" check-ignore -q .tree/; then
+  echo "Error: .tree/ is not git-ignored in this repository" >&2
+  echo "" >&2
+  echo "To fix this, add the following line to $repo_root/.gitignore:" >&2
+  echo "  .tree/" >&2
+  echo "" >&2
+  echo "Then commit the .gitignore change before creating worktrees." >&2
+  exit 1
+fi
+
+mkdir -p "$repo_root/.tree"
+
+dest_dir="$repo_root/.tree/$tree_name"
 
 if git show-ref --verify --quiet "refs/heads/$branch_name"; then
   echo "Creating worktree at $dest_dir on existing branch '$branch_name'"
@@ -56,24 +76,34 @@ else
   echo "✓ New branch '$branch_name' created"
 fi
 
-# Copy local environment files if present
-if [[ -f .env ]]; then
+# Copy local environment files if present in current worktree root
+if [[ -f "$current_root/.env" ]]; then
   if [[ -e "$dest_dir/.env" ]]; then
     echo "• .env already exists in $dest_dir; leaving it as is"
   else
-    cp .env "$dest_dir/.env"
+    cp "$current_root/.env" "$dest_dir/.env"
     echo "✓ Copied .env to $dest_dir/.env"
   fi
 fi
 
-if [[ -f .envrc ]]; then
+if [[ -f "$current_root/.envrc" ]]; then
   if [[ -e "$dest_dir/.envrc" ]]; then
     echo "• .envrc already exists in $dest_dir; leaving it as is"
   else
-    cp .envrc "$dest_dir/.envrc"
+    cp "$current_root/.envrc" "$dest_dir/.envrc"
     echo "✓ Copied .envrc to $dest_dir/.envrc"
   fi
 fi
 
+# Link .claude/settings.local.json from repo root if it exists
+# This ensures all worktrees share the same local settings
+if [[ -f "$repo_root/.claude/settings.local.json" ]]; then
+  mkdir -p "$dest_dir/.claude"
+  ln -s "$repo_root/.claude/settings.local.json" "$dest_dir/.claude/settings.local.json"
+  echo "✓ Linked .claude/settings.local.json from repo root"
+fi
+
 echo "To switch to this worktree: cd $dest_dir"
+echo ""
+echo "Next step: run baseline tests in the new worktree to verify clean state"
 

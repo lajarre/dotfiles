@@ -46,8 +46,17 @@ fi
 
 # Check if worktree directory exists
 if [[ ! -d "$worktree_path" ]]; then
-  echo "Error: worktree directory '$worktree_path' does not exist" >&2
-  exit 1
+  # Try looking in the repo root .tree/
+  git_common_dir=$(git rev-parse --git-common-dir)
+  repo_root=$(cd "$(dirname "$git_common_dir")" && pwd)
+  
+  if [[ -d "$repo_root/.tree/$worktree_path" ]]; then
+    echo "Found worktree at $repo_root/.tree/$worktree_path"
+    worktree_path="$repo_root/.tree/$worktree_path"
+  else
+    echo "Error: worktree directory '$worktree_path' does not exist" >&2
+    exit 1
+  fi
 fi
 
 # Get the branch name associated with this worktree

@@ -17,6 +17,22 @@ The typical worktree lifecycle:
 2. **Work** in that worktree (user navigates manually)
 3. **Close** the worktree when done, optionally merging back to main
 
+## Important: Always Display Worktrees
+
+**CRITICAL INSTRUCTION:** After completing any worktree operation (create, merge, delete, archive), you MUST always run `git worktree list` and display the current state of all worktrees before yielding control back to the user.
+
+This helps the user maintain awareness of their worktree state and verify that operations completed successfully.
+
+**Example output format:**
+```
+**Current worktrees (N total):**
+
+- `/path/to/repo` - detached HEAD (commit-hash)
+- `/path/to/repo.bare` - detached HEAD (commit-hash)
+- `feature-name` - branch: feature-name
+- `maincomp` - branch: main
+```
+
 ## Available Operations
 
 ### Creating a New Worktree
@@ -31,7 +47,7 @@ git newtree <tree-name> [branch-name]
 - Creates worktree at `.tree/<tree-name>`
 - If branch exists, checks it out; otherwise creates new branch
 - Branch name defaults to tree-name if not specified
-- Copies `.env` and `.envrc` files to the new worktree if present
+- Copies `.env`, `.envrc`, and `.claude/` to the new worktree if present
 - Reports the path for manual navigation
 
 **Examples:**
@@ -134,7 +150,9 @@ See `references/git-scripts-reference.md` for detailed documentation of all git 
 
 ## Working Directory Conventions
 
-- **Main repo:** Usually has detached HEAD
+- **Main repo (root worktree):** Should stay in detached HEAD on freshest `origin/main`
+  - After merging branches, update with: `git checkout --detach origin/main`
+  - This prevents conflicts with other worktrees checking out branches
 - **Worktrees:** Located in `.tree/` subdirectory
 - **Main branch:** Typically lives in `.tree/maincomp` or similar
 - **Feature branches:** Each in its own `.tree/<name>` directory

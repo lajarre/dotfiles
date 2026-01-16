@@ -8,7 +8,7 @@ set -euo pipefail
 
 usage() {
   cat << 'EOF'
-git substat - Show detailed status of all git submodules
+git substat - Show detailed status of all git submodules.
 
 USAGE:
     git substat
@@ -21,10 +21,7 @@ DESCRIPTION:
     - Count of untracked, modified, and deleted files
     - First 5 changes (if any)
 
-EXAMPLES:
-    git substat
-
-OUTPUT:
+TYPICAL OUTPUT (REPO WITH SUBMODULES):
     # Submodule Status
 
     ## [submodule-name] path/to/submodule
@@ -37,10 +34,34 @@ OUTPUT:
         M  src/file.js
         D  old/file.js
 
+EXAMPLES BY CASE:
+  Clean submodule:
+    ## [lib-a] libs/lib-a
+    ✅ Branch: main - clean
+
+  Dirty submodule:
+    ## [lib-b] libs/lib-b
+    🔴 Branch: feature-x
+      - 1 untracked files
+      - 2 modified files
+        M  src/index.js
+        M  README.md
+
+  Detached HEAD:
+    ## [lib-c] libs/lib-c
+    🔴 Branch: detached
+      - 1 deleted files
+        D  old/file.js
+
+  No submodules in repo:
+    No submodules found in this repository
+
+OUTPUT:
+    # Submodule Status
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "--usage" ]]; then
   usage
   exit 0
 fi
@@ -68,9 +89,9 @@ git submodule foreach --quiet '
   if [ -z "$changes" ]; then
     echo "✅ Branch: $branch - clean"
   else
-    untracked=$(echo "$changes" | grep -c "^??" || echo "0")
-    modified=$(echo "$changes" | grep -c "^ M" || echo "0")
-    deleted=$(echo "$changes" | grep -c "^ D" || echo "0")
+    untracked=$(echo "$changes" | grep "^??" | wc -l)
+    modified=$(echo "$changes" | grep "^ M" | wc -l)
+    deleted=$(echo "$changes" | grep "^ D" | wc -l)
 
     echo "🔴 Branch: $branch"
     [ "$untracked" -gt 0 ] && echo "  - $untracked untracked files"
