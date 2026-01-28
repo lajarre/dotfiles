@@ -11,31 +11,36 @@ Create a handoff document for session continuity. Core principle: session id mus
 
 ## Deterministic session id (Codex)
 
-### Primary resolver (PATH -> shell snapshot)
+### Primary resolver (PPID -> open rollout file)
 
-1. Extract the Codex temp PATH entry (unique per Codex session):
+When Codex runs a tool command, the shell process is a child of the Codex
+process (`codex-aar`). In bash/zsh, `$PPID` is the parent PID. Use it to find
+the exact rollout file this Codex process is writing.
 
-   `codex_path=$(echo "$PATH" | tr ':' '\n' | rg '^/Users/[^/]+/.codex/tmp/path/codex-arg0' | head -n 1)`
+1. Capture the parent PID:
 
-2. Find matching shell snapshot files:
+   `ppid=$PPID`
 
-   `rg -l --fixed-strings "$codex_path" ~/.codex/shell_snapshots/*.sh`
+2. Find the open rollout file (must be exactly one):
 
-3. Require exactly one match. If 0 or >1, fail hard and stop.
+   `lsof -nP -p "$ppid" 2>/dev/null | rg '/\\.codex/sessions/.*/rollout-.*\\.jsonl'`
 
-4. Derive the session id from the snapshot filename:
+3. Extract the rollout path:
 
-   `sid="${snap##*/}"; sid="${sid%.sh}"`
+   `rollout=$(lsof -nP -p "$ppid" 2>/dev/null | rg '/\\.codex/sessions/.*/rollout-.*\\.jsonl' | awk '{print $NF}')`
 
-5. Verify exactly one session file exists:
+4. Derive the session id from the rollout filename:
 
-   `rg -l --fixed-strings "\"id\":\"$sid\"" ~/.codex/sessions -g "rollout-*.jsonl"`
+   `sid=$(printf "%s" "${rollout##*/}" | sed 's/^rollout-//' | cut -d- -f6- | sed 's/\\.jsonl$//')`
+
+5. Verify the rollout file contains the expected session id:
+
+   `rg -q --fixed-strings "\"type\":\"session_meta\"" "$rollout" && rg -q --fixed-strings "\"id\":\"$sid\"" "$rollout"`
 
 ### Fail hard conditions
 
-- No codex-arg0 PATH entry found.
-- 0 or >1 matching snapshots.
-- 0 or >1 matching session jsonl files.
+- `lsof` returns 0 or >1 rollout files for `$PPID`.
+- Rollout file does not contain the derived session id.
 
 If any fail, stop and ask the user to restart the session or provide a deterministic session id.
 
@@ -74,10 +79,11 @@ If any fail, stop and ask the user to restart the session or provide a determini
 
 | Task | Command |
 | --- | --- |
-| Find Codex PATH entry | `echo "$PATH" | tr ':' '\n' | rg '^/Users/[^/]+/.codex/tmp/path/codex-arg0' | head -n 1` |
-| Find snapshot matches | `rg -l --fixed-strings "$codex_path" ~/.codex/shell_snapshots/*.sh` |
-| Extract session id | `sid="${snap##*/}"; sid="${sid%.sh}"` |
-| Verify session file | `rg -l --fixed-strings "\"id\":\"$sid\"" ~/.codex/sessions -g "rollout-*.jsonl"` |
+| Get parent pid | `ppid=$PPID` |
+| Find rollout via ppid | `lsof -nP -p "$ppid" 2>/dev/null \| rg '/\\.codex/sessions/.*/rollout-.*\\.jsonl'` |
+| Extract session id | `sid=$(printf "%s" "${rollout##*/}" \| sed 's/^rollout-//' \| cut -d- -f6- \| sed 's/\\.jsonl$//')` |
+| Verify session id | `rg -q --fixed-strings "\"id\":\"$sid\"" "$rollout"` |
+| One‑liner (prints SESSION_ID) | `ppid=$PPID; line=$(lsof -nP -p "$ppid" 2>/dev/null \| rg '/\\.codex/sessions/.*/rollout-.*\\.jsonl' \| head -n 1); rollout=$(printf "%s" "$line" \| awk '{print $NF}'); sid=$(printf "%s" "${rollout##*/}" \| sed 's/^rollout-//' \| cut -d- -f6- \| sed 's/\\.jsonl$//'); echo "SESSION_ID=$sid"` |
 
 ## Example (bash)
 
@@ -88,24 +94,24 @@ or save it to a file with `#!/usr/bin/env bash` and execute with `bash`.
 #!/usr/bin/env bash
 set -euo pipefail
 
-codex_path=$(echo "$PATH" | tr ':' '\n' | rg '^/Users/[^/]+/.codex/tmp/path/codex-arg0' | head -n 1)
-if [[ -z "$codex_path" ]]; then
-  echo "ERROR: codex PATH entry not found; cannot resolve session id deterministically."
+ppid=$PPID
+
+mapfile -t rollout_lines < <(lsof -nP -p "$ppid" 2>/dev/null | rg '/\\.codex/sessions/.*/rollout-.*\\.jsonl')
+if [[ "${#rollout_lines[@]}" -ne 1 ]]; then
+  echo "ERROR: expected exactly one rollout file from lsof; found ${#rollout_lines[@]}."
+  printf "%s\n" "${rollout_lines[@]}" >&2 || true
   exit 1
 fi
 
-mapfile -t snaps < <(rg -l --fixed-strings "$codex_path" ~/.codex/shell_snapshots/*.sh)
-if [[ "${#snaps[@]}" -ne 1 ]]; then
-  echo "ERROR: expected exactly one matching shell snapshot; found ${#snaps[@]}."
+rollout=$(printf "%s\n" "${rollout_lines[0]}" | awk '{print $NF}')
+sid=$(printf "%s" "${rollout##*/}" | sed 's/^rollout-//' | cut -d- -f6- | sed 's/\\.jsonl$//')
+
+if ! rg -q --fixed-strings "\"type\":\"session_meta\"" "$rollout"; then
+  echo "ERROR: rollout file missing session_meta"
   exit 1
 fi
-
-sid="${snaps[0]##*/}"
-sid="${sid%.sh}"
-
-mapfile -t sessions < <(rg -l --fixed-strings "\"id\":\"$sid\"" ~/.codex/sessions -g "rollout-*.jsonl")
-if [[ "${#sessions[@]}" -ne 1 ]]; then
-  echo "ERROR: expected exactly one session file for $sid; found ${#sessions[@]}."
+if ! rg -q --fixed-strings "\"id\":\"$sid\"" "$rollout"; then
+  echo "ERROR: rollout file does not contain expected id $sid"
   exit 1
 fi
 
@@ -142,23 +148,20 @@ echo "Wrote .agent/HANDOFF.${sid}.md"
 digraph resolve_session_id {
   rankdir=LR;
   start [label="Need Codex session id", shape=ellipse];
-  has_path [label="codex-arg0 PATH entry found?", shape=diamond];
-  find_snap [label="Find snapshot matches", shape=box];
-  one_snap [label="Exactly one match?", shape=diamond];
-  verify [label="Verify session file", shape=box];
-  one_session [label="Exactly one session file?", shape=diamond];
+  lsof [label="Find rollout via lsof($PPID)", shape=box];
+  one_rollout [label="Exactly one rollout?", shape=diamond];
+  derive [label="Derive sid from rollout filename", shape=box];
+  verify [label="Verify session_meta + id", shape=box];
   use_id [label="Use session id", shape=box];
   fail [label="Fail hard and stop", shape=box];
 
-  start -> has_path;
-  has_path -> find_snap [label="yes"];
-  has_path -> fail [label="no"];
-  find_snap -> one_snap;
-  one_snap -> verify [label="yes"];
-  one_snap -> fail [label="no"];
-  verify -> one_session;
-  one_session -> use_id [label="yes"];
-  one_session -> fail [label="no"];
+  start -> lsof;
+  lsof -> one_rollout;
+  one_rollout -> derive [label="yes"];
+  one_rollout -> fail [label="no"];
+  derive -> verify;
+  verify -> use_id [label="ok"];
+  verify -> fail [label="no"];
 }
 ```
 
@@ -166,7 +169,7 @@ digraph resolve_session_id {
 
 - Use TERM_SESSION_ID or ITERM_SESSION_ID alone.
 - Pick the most recent rollout file or history entry.
-- Ignore multiple snapshot matches.
+- Ignore multiple lsof matches.
 - Run the bash example in zsh (mapfile is not available).
 - Continue after a failed deterministic check.
 
