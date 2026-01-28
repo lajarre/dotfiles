@@ -1,6 +1,6 @@
 ---
 name: worktree-tending
-description: Use when creating, switching, merging, or removing git worktrees. Use when user mentions worktrees, branches in parallel, or .tree/ directories.
+description: Use when creating, switching, merging, or removing git worktrees. Use when user mentions worktrees, branches in parallel, .tree/ directories, or submodule branch coordination.
 ---
 
 # Worktree Tending
@@ -31,3 +31,11 @@ Manage git worktrees with **worktrunk** (`wt`). Run `wt --help` or `wt <cmd> --h
 **wt merge direction:** Run from *feature* worktree, merges current → target (opposite of `git merge`)
 
 **Config location:** `~/.config/worktrunk/config.toml` — sets `.tree/` path template, post-create hooks, and `squash = false` default
+
+## Submodules
+
+`wt` doesn't manage submodules. Helper scripts in `~/bin/`:
+
+- `git substat` — status of all submodules (branch, dirty state)
+- `git subdate [branch]` — update submodules to main or specific branch
+- `git superbranch` — match submodule branch to parent (run inside submodule)

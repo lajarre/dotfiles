@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+git-superbranch - Create/switch a submodule branch to match superproject
+
+USAGE:
+  git-superbranch [--pub]
+  git-superbranch -h|--help
+
+DESCRIPTION:
+  Ensures the submodule is on main/master, pulls from origin, then creates or
+  switches to a branch that exactly matches the superproject's branch name.
+
+OPTIONS:
+  --pub   Publish the branch to origin with: git push -u
+  -h      Show this help message
+EOF
+}
+
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+info() { echo -e "${BLUE}[info]${NC} $*"; }
+warn() { echo -e "${YELLOW}[warn]${NC} $*"; }
+error() { echo -e "${RED}[error]${NC} $*"; }
+success() { echo -e "${GREEN}[ok]${NC} $*"; }
+
+PUB=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --pub)
+      PUB=true
+      shift
+      ;;
+    *)
+      error "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  error "Not in a git repository"
+  exit 1
+fi
+
+superproject=$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)
+if [[ -z "$superproject" ]]; then
+  error "Must be run inside a submodule"
+  exit 1
+fi
+
+super_branch=$(git -C "$superproject" symbolic-ref --short HEAD 2>/dev/null || true)
+if [[ -z "$super_branch" ]]; then
+  error "Superproject is detached; cannot determine branch"
+  exit 1
+fi
+
+has_local_branch() {
+  git show-ref --verify --quiet "refs/heads/$1"
+}
+
+has_remote_branch() {
+  git show-ref --verify --quiet "refs/remotes/origin/$1"
+}
+
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+
+git fetch origin
+
+base_branch=""
+if has_local_branch "main" || has_remote_branch "main"; then
+  base_branch="main"
+elif has_local_branch "master" || has_remote_branch "master"; then
+  base_branch="master"
+else
+  error "No main/master branch found on origin"
+  exit 1
+fi
+
+if [[ "$current_branch" != "$base_branch" ]]; then
+  if has_local_branch "$base_branch"; then
+    info "Switching to $base_branch"
+    git checkout "$base_branch"
+  else
+    info "Checking out origin/$base_branch"
+    git checkout -t "origin/$base_branch"
+  fi
+fi
+
+git pull --ff-only origin "$base_branch"
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+
+if has_local_branch "$super_branch"; then
+  if [[ "$current_branch" != "$super_branch" ]]; then
+    info "Switching to $super_branch"
+    git checkout "$super_branch"
+  fi
+  if $PUB; then
+    git push -u origin "$super_branch"
+  fi
+  success "On $super_branch"
+  exit 0
+fi
+
+if has_remote_branch "$super_branch"; then
+  warn "origin/$super_branch exists; checking out remote branch"
+  if git merge-base --is-ancestor "$base_branch" "origin/$super_branch"; then
+    git checkout -t "origin/$super_branch"
+    if $PUB; then
+      git push -u origin "$super_branch"
+    fi
+    success "On $super_branch"
+    exit 0
+  fi
+
+  error "origin/$super_branch is not ahead of $base_branch; divergent history"
+  exit 1
+fi
+
+info "Creating branch $super_branch from $base_branch"
+git checkout -b "$super_branch"
+
+if $PUB; then
+  git push -u origin "$super_branch"
+fi
+
+success "On $super_branch"

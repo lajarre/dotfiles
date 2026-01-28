@@ -15,49 +15,18 @@ USAGE:
     git substat --help | -h
 
 DESCRIPTION:
-    Shows a detailed status report for each submodule including:
-    - Current branch (or "detached" if in detached HEAD state)
-    - Clean/dirty status
-    - Count of untracked, modified, and deleted files
-    - First 5 changes (if any)
+    Shows status for each submodule: branch, changes, file counts.
 
-TYPICAL OUTPUT (REPO WITH SUBMODULES):
-    # Submodule Status
+    Legend: 👔 clean | 🧺 dirty | 🌿 branch | 🔀 branch≠parent | 🎯 detached@origin | ❓ detached
 
-    ## [submodule-name] path/to/submodule
-    ✅ Branch: main - clean
+EXAMPLES:
+    👔 🌿 lib-a     [main       ]
+    🧺 🌿 lib-b     [feature-x  ] ?1 M2 D1
+    👔 🎯 lib-c     [origin/main]
+    🧺 ❓ lib-d     [abc1234    ] M3
+    👔 🔀 lib-e     [feature-y  ]
 
-    ## [other-submodule] path/to/other
-    🔴 Branch: feature-x
-      - 2 modified files
-      - 1 deleted files
-        M  src/file.js
-        D  old/file.js
-
-EXAMPLES BY CASE:
-  Clean submodule:
-    ## [lib-a] libs/lib-a
-    ✅ Branch: main - clean
-
-  Dirty submodule:
-    ## [lib-b] libs/lib-b
-    🔴 Branch: feature-x
-      - 1 untracked files
-      - 2 modified files
-        M  src/index.js
-        M  README.md
-
-  Detached HEAD:
-    ## [lib-c] libs/lib-c
-    🔴 Branch: detached
-      - 1 deleted files
-        D  old/file.js
-
-  No submodules in repo:
-    No submodules found in this repository
-
-OUTPUT:
-    # Submodule Status
+    Counts: ?=untracked M=modified D=deleted
 EOF
 }
 
@@ -77,32 +46,69 @@ if [[ ! -f .gitmodules ]]; then
   exit 0
 fi
 
-echo "# Submodule Status"
-echo
+# Collect submodule info
+parent_branch=$(git branch --show-current 2>/dev/null || true)
+declare -a lines=()
+maxname=0
+maxbranch=0
 
-git submodule foreach --quiet '
-  echo "## [$name] $path"
+while IFS= read -r subpath; do
+  [[ -z "$subpath" ]] && continue
+  name=$(basename "$subpath")
 
-  branch=$(git branch --show-current 2>/dev/null || echo "detached")
-  changes=$(git status -s 2>/dev/null)
+  branch=$(git -C "$subpath" branch --show-current 2>/dev/null)
+  if [ -z "$branch" ]; then
+    # Detached HEAD - check if at origin/main or origin/master
+    head_sha=$(git -C "$subpath" rev-parse HEAD 2>/dev/null)
+    origin_main_sha=$(git -C "$subpath" rev-parse origin/main 2>/dev/null || true)
+    origin_master_sha=$(git -C "$subpath" rev-parse origin/master 2>/dev/null || true)
 
-  if [ -z "$changes" ]; then
-    echo "✅ Branch: $branch - clean"
+    if [ -n "$origin_main_sha" ] && [ "$head_sha" = "$origin_main_sha" ]; then
+      branchemoji="🎯"
+      branchname="origin/main"
+    elif [ -n "$origin_master_sha" ] && [ "$head_sha" = "$origin_master_sha" ]; then
+      branchemoji="🎯"
+      branchname="origin/master"
+    else
+      branchemoji="❓"
+      # Show abbreviated commit hash
+      branchname=$(git -C "$subpath" rev-parse --short HEAD 2>/dev/null || echo "???")
+    fi
   else
-    untracked=$(echo "$changes" | grep "^??" | wc -l)
-    modified=$(echo "$changes" | grep "^ M" | wc -l)
-    deleted=$(echo "$changes" | grep "^ D" | wc -l)
-
-    echo "🔴 Branch: $branch"
-    [ "$untracked" -gt 0 ] && echo "  - $untracked untracked files"
-    [ "$modified" -gt 0 ] && echo "  - $modified modified files"
-    [ "$deleted" -gt 0 ] && echo "  - $deleted deleted files"
-
-    echo "$changes" | grep -v "^??" | head -5 | sed "s/^/    /"
-
-    remaining=$(echo "$changes" | grep -v "^??" | wc -l | xargs)
-    [ "$remaining" -gt 5 ] && echo "    ... and $((remaining - 5)) more changes"
+    branchemoji="🌿"
+    branchname="$branch"
+    if [ -n "$parent_branch" ] && [ "$branch" != "$parent_branch" ] && [ "$branch" != "main" ] && [ "$branch" != "master" ]; then
+      branchemoji="🔀"
+    fi
   fi
 
-  echo
-'
+  changes=$(git -C "$subpath" status -s 2>/dev/null)
+
+  if [ -z "$changes" ]; then
+    status="👔"
+    counts=""
+  else
+    status="🧺"
+    u=$(echo "$changes" | grep -c "^??" || true)
+    m=$(echo "$changes" | grep -c "^ M" || true)
+    d=$(echo "$changes" | grep -c "^ D" || true)
+    counts=""
+    [ "$u" -gt 0 ] && counts="?$u "
+    [ "$m" -gt 0 ] && counts="${counts}M$m "
+    [ "$d" -gt 0 ] && counts="${counts}D$d"
+  fi
+
+  lines+=("$status|$branchemoji|$name|$branchname|$counts")
+  (( ${#name} > maxname )) && maxname=${#name}
+  (( ${#branchname} > maxbranch )) && maxbranch=${#branchname}
+done < <(git config --file .gitmodules --get-regexp path | awk '{print $2}')
+
+# Print table
+for line in "${lines[@]}"; do
+  IFS='|' read -r status branchemoji name branchname counts <<< "$line"
+  if [ -n "$branchname" ]; then
+    printf "%s %s %-${maxname}s [%-${maxbranch}s] %s\n" "$status" "$branchemoji" "$name" "$branchname" "$counts"
+  else
+    printf "%s %s %-${maxname}s  %-${maxbranch}s  %s\n" "$status" "$branchemoji" "$name" "" "$counts"
+  fi
+done

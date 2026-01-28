@@ -1,0 +1,600 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# git-subdate: Update submodules to main/master or a specified branch
+
+usage() {
+  cat <<EOF
+Usage: git-subdate [options] [branchname] [submodules...]
+
+Update submodules to main/master, or to a specified branch if available.
+
+Options:
+  -h, --help      Show this help message
+  --pull[=mode]   Allow non-fast-forward pulls (default mode honors git config)
+                 mode: default | rebase | merge
+  --reset-hard    Skip ahead/dirty checks and use reset --hard
+  --skip-dirty    Skip dirty submodules (warn instead of failing)
+  -m "msg"        Stage updated submodules and commit with message
+  --dry-run       Show what would be done without making changes
+
+Arguments:
+  branchname      Optional branch to switch submodules to.
+                  Submodules with origin/<branchname> will switch to it.
+                  Others fall back to main/master.
+                  Fails if no submodule has the branch.
+  submodules...   Optional list of submodule paths to update.
+                  If omitted, all submodules are updated.
+
+Behavior:
+  - Fetches origin for all submodules first
+  - Checks if any targeted submodule has local changes (fails unless --skip-dirty or --reset-hard)
+  - Checks if any targeted submodule ref is ahead of target (fails unless --reset-hard)
+  - If on a branch: pulls (--ff-only unless --pull/--pull=rebase/--pull=merge)
+  - If detached: checks out origin/main or origin/master (or origin/<branchname>)
+  - With branchname: submodules with origin/<branchname> switch to it
+  - Submodules on unrelated branches are left alone (no branchname arg)
+EOF
+  exit 0
+}
+
+# Colors for output
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+info() { echo -e "${BLUE}[info]${NC} $*"; }
+warn() { echo -e "${YELLOW}[warn]${NC} $*"; }
+error() { echo -e "${RED}[error]${NC} $*"; }
+success() { echo -e "${GREEN}[ok]${NC} $*"; }
+
+# Parse arguments
+PULL_MODE="ff-only" # ff-only | default | rebase | merge
+RESET_HARD=false
+SKIP_DIRTY=false
+DRY_RUN=false
+COMMIT_MSG=""
+BRANCHNAME=""
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help)
+      usage
+      ;;
+    --pull)
+      PULL_MODE="default"
+      shift
+      ;;
+    --pull=*)
+      PULL_MODE="${1#--pull=}"
+      shift
+      ;;
+    --reset-hard)
+      RESET_HARD=true
+      shift
+      ;;
+    --skip-dirty)
+      SKIP_DIRTY=true
+      shift
+      ;;
+    -m)
+      COMMIT_MSG="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --)
+      shift
+      POSITIONAL_ARGS+=("$@")
+      break
+      ;;
+    -*)
+      error "Unknown option: $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Validate pull mode
+case "$PULL_MODE" in
+  ff-only|default|rebase|merge)
+    ;;
+  emrge)
+    # common typo
+    PULL_MODE="merge"
+    ;;
+  *)
+    error "Invalid --pull mode: $PULL_MODE (expected default|rebase|merge)"
+    exit 1
+    ;;
+esac
+
+# Must be in a git repo
+if ! git rev-parse --git-dir &>/dev/null; then
+  error "Not in a git repository"
+  exit 1
+fi
+
+# Helper: check if a value is in a list (needed early for arg parsing)
+is_in_list() {
+  local needle="$1"
+  shift
+  local item
+  for item in "$@"; do
+    if [[ "$item" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Get list of submodules
+get_submodules() {
+  git submodule--helper list 2>/dev/null | awk '{print $4}' || \
+    git config --file .gitmodules --get-regexp path | awk '{print $2}'
+}
+
+ALL_SUBMODULES=($(get_submodules))
+
+if [[ ${#ALL_SUBMODULES[@]} -eq 0 ]]; then
+  info "No submodules found"
+  exit 0
+fi
+
+# Separate positional args into branchname vs submodule filters
+# An arg is a submodule if it matches a known submodule path
+SUBMODULE_FILTERS=()
+for arg in "${POSITIONAL_ARGS[@]}"; do
+  # Normalize: strip trailing slashes
+  arg="${arg%/}"
+  if is_in_list "$arg" "${ALL_SUBMODULES[@]}"; then
+    SUBMODULE_FILTERS+=("$arg")
+  else
+    if [[ -n "$BRANCHNAME" ]]; then
+      error "Unknown submodule or multiple branch names: $arg"
+      exit 1
+    fi
+    BRANCHNAME="$arg"
+  fi
+done
+
+# Apply submodule filter
+if [[ ${#SUBMODULE_FILTERS[@]} -gt 0 ]]; then
+  SUBMODULES=("${SUBMODULE_FILTERS[@]}")
+  info "Targeting submodules: ${SUBMODULES[*]}"
+else
+  SUBMODULES=("${ALL_SUBMODULES[@]}")
+fi
+
+# Helper: get the default branch (main or master) from origin
+get_default_branch() {
+  local submodule="$1"
+  (
+    cd "$submodule"
+    if git show-ref --verify --quiet refs/remotes/origin/main; then
+      echo "main"
+    elif git show-ref --verify --quiet refs/remotes/origin/master; then
+      echo "master"
+    else
+      echo ""
+    fi
+  )
+}
+
+# Helper: get current branch (empty if detached)
+get_current_branch() {
+  local submodule="$1"
+  (
+    cd "$submodule"
+    git symbolic-ref --short HEAD 2>/dev/null || echo ""
+  )
+}
+
+# Helper: check if local branch exists
+has_local_branch() {
+  local submodule="$1"
+  local branch="$2"
+  (
+    cd "$submodule"
+    git show-ref --verify --quiet "refs/heads/$branch"
+  )
+}
+
+# Helper: check if remote branch exists
+has_remote_branch() {
+  local submodule="$1"
+  local branch="$2"
+  (
+    cd "$submodule"
+    git show-ref --verify --quiet "refs/remotes/origin/$branch"
+  )
+}
+
+# Helper: check if working tree is clean (tracked + untracked)
+is_clean_tree() {
+  local submodule="$1"
+  (
+    cd "$submodule"
+    [[ -z "$(git status --porcelain)" ]]
+  )
+}
+
+# Helper: check if HEAD is ahead of a ref
+is_ahead_of() {
+  local submodule="$1"
+  local ref="$2"
+  local local_ref="${3:-HEAD}"
+  (
+    cd "$submodule"
+    local ahead
+    ahead=$(git rev-list --count "$ref..$local_ref" 2>/dev/null || echo "0")
+    [[ "$ahead" -gt 0 ]]
+  )
+}
+
+# Helper: is branch main or master?
+is_main_or_master() {
+  local branch="$1"
+  [[ "$branch" == "main" || "$branch" == "master" ]]
+}
+
+# Track updated submodules for commit
+UPDATED_SUBMODULES=()
+
+# ============================================================================
+# STEP A: Fetch origin for targeted submodules
+# ============================================================================
+if [[ ${#SUBMODULE_FILTERS[@]} -gt 0 ]]; then
+  info "Fetching origin for ${#SUBMODULES[@]} submodule(s)..."
+else
+  info "Fetching origin for all submodules..."
+fi
+for submodule in "${SUBMODULES[@]}"; do
+  if $DRY_RUN; then
+    info "[dry-run] Would fetch origin in $submodule"
+  else
+    (cd "$submodule" && git fetch origin --quiet) || {
+      warn "Failed to fetch origin in $submodule"
+    }
+  fi
+done
+
+# ============================================================================
+# STEP AA: If branchname, ensure at least one submodule has origin/<branchname>
+# ============================================================================
+if [[ -n "$BRANCHNAME" ]]; then
+  FOUND_BRANCH=false
+  for submodule in "${SUBMODULES[@]}"; do
+    if has_remote_branch "$submodule" "$BRANCHNAME"; then
+      FOUND_BRANCH=true
+      break
+    fi
+  done
+
+  if ! $FOUND_BRANCH; then
+    error "No submodule has origin/$BRANCHNAME"
+    exit 1
+  fi
+fi
+
+# ============================================================================
+# STEP B: Preflight check for dirty submodules (unless --reset-hard)
+# ============================================================================
+DIRTY_SUBMODULES=()
+if ! $RESET_HARD; then
+  for submodule in "${SUBMODULES[@]}"; do
+    current=$(get_current_branch "$submodule")
+    default_branch=$(get_default_branch "$submodule")
+
+    will_touch=false
+    if [[ -n "$BRANCHNAME" ]] && has_remote_branch "$submodule" "$BRANCHNAME"; then
+      will_touch=true
+    else
+      if [[ -z "$current" ]]; then
+        [[ -n "$default_branch" ]] && will_touch=true
+      elif is_main_or_master "$current"; then
+        will_touch=true
+      fi
+    fi
+
+    if $will_touch; then
+      if ! is_clean_tree "$submodule"; then
+        DIRTY_SUBMODULES+=("$submodule")
+      fi
+    fi
+  done
+
+  if [[ ${#DIRTY_SUBMODULES[@]} -gt 0 ]]; then
+    if $SKIP_DIRTY; then
+      : # handled later during update loop
+    else
+      error "Some submodules have local changes (use --skip-dirty to skip or --reset-hard to override):"
+      for submodule in "${DIRTY_SUBMODULES[@]}"; do
+        echo "  - $submodule has local changes"
+      done
+      exit 1
+    fi
+  fi
+fi
+
+# ============================================================================
+# STEP C: Check ahead conditions (unless --reset-hard)
+# ============================================================================
+if ! $RESET_HARD; then
+  AHEAD_ERRORS=()
+
+  for submodule in "${SUBMODULES[@]}"; do
+    if $SKIP_DIRTY && is_in_list "$submodule" "${DIRTY_SUBMODULES[@]}"; then
+      continue
+    fi
+
+    current=$(get_current_branch "$submodule")
+    default_branch=$(get_default_branch "$submodule")
+
+    target_ref=""
+    local_ref="HEAD"
+    should_check=false
+
+    if [[ -z "$BRANCHNAME" ]]; then
+      # No argument mode
+      if [[ -z "$current" ]] || is_main_or_master "$current"; then
+        # Detached or on main/master: check against origin/main or origin/master
+        if [[ -n "$default_branch" ]]; then
+          target_ref="origin/$default_branch"
+          if [[ -n "$current" ]]; then
+            local_ref="$current"
+          fi
+          should_check=true
+        fi
+      fi
+    else
+      # branchname argument mode
+      if has_remote_branch "$submodule" "$BRANCHNAME"; then
+        target_ref="origin/$BRANCHNAME"
+        if [[ -z "$current" ]]; then
+          # Detached: check HEAD to avoid abandoning local commits
+          local_ref="HEAD"
+          should_check=true
+        else
+          # If a local branch exists, enforce it isn't ahead of origin/$BRANCHNAME
+          if has_local_branch "$submodule" "$BRANCHNAME"; then
+            local_ref="$BRANCHNAME"
+            should_check=true
+          fi
+        fi
+      else
+        # No origin/$BRANCHNAME in this submodule: fall back to main/master behavior
+        if [[ -z "$current" ]] || is_main_or_master "$current"; then
+          if [[ -n "$default_branch" ]]; then
+            target_ref="origin/$default_branch"
+            if [[ -n "$current" ]]; then
+              local_ref="$current"
+            fi
+            should_check=true
+          fi
+        fi
+      fi
+    fi
+
+    if $should_check && [[ -n "$target_ref" ]]; then
+      if is_ahead_of "$submodule" "$target_ref" "$local_ref"; then
+        AHEAD_ERRORS+=("$submodule is ahead of $target_ref ($local_ref)")
+      fi
+    fi
+  done
+
+  if [[ ${#AHEAD_ERRORS[@]} -gt 0 ]]; then
+    error "Some submodules are ahead of their target (use --reset-hard to override):"
+    for e in "${AHEAD_ERRORS[@]}"; do
+      echo "  - $e"
+    done
+    exit 1
+  fi
+fi
+
+# ============================================================================
+# STEP D: Perform writes
+# ============================================================================
+for submodule in "${SUBMODULES[@]}"; do
+  if ! $RESET_HARD && $SKIP_DIRTY && is_in_list "$submodule" "${DIRTY_SUBMODULES[@]}"; then
+    warn "$submodule: has local changes, skipping (--skip-dirty)"
+    continue
+  fi
+
+  current=$(get_current_branch "$submodule")
+  default_branch=$(get_default_branch "$submodule")
+
+  action=""
+  target=""
+
+  if [[ -z "$BRANCHNAME" ]]; then
+    # No argument mode
+    if [[ -z "$current" ]]; then
+      # Detached HEAD: move to origin/main or origin/master
+      if [[ -n "$default_branch" ]]; then
+        action="checkout_detached"
+        target="origin/$default_branch"
+      fi
+    elif is_main_or_master "$current"; then
+      # On main or master: pull
+      action="pull"
+      target="$current"
+    else
+      # On another branch: don't do anything
+      info "$submodule: on branch '$current', skipping"
+      continue
+    fi
+  else
+    # branchname argument mode
+    if has_remote_branch "$submodule" "$BRANCHNAME"; then
+      action="switch_and_pull"
+      target="$BRANCHNAME"
+    else
+      if [[ -z "$current" ]]; then
+        if [[ -n "$default_branch" ]]; then
+          action="checkout_detached"
+          target="origin/$default_branch"
+        fi
+      elif is_main_or_master "$current"; then
+        action="pull"
+        target="$current"
+      else
+        info "$submodule: on branch '$current', skipping"
+        continue
+      fi
+    fi
+  fi
+
+  if [[ -z "$action" ]]; then
+    warn "$submodule: no action determined, skipping"
+    continue
+  fi
+
+  # Determine the actual command based on mode
+  if $DRY_RUN; then
+    case "$action" in
+      checkout_detached)
+        if $RESET_HARD; then
+          info "[dry-run] $submodule: would reset --hard $target (detached)"
+        else
+          info "[dry-run] $submodule: would checkout $target (detached)"
+        fi
+        ;;
+      pull)
+        if $RESET_HARD; then
+          info "[dry-run] $submodule: would reset --hard origin/$target"
+        elif [[ "$PULL_MODE" == "default" ]]; then
+          info "[dry-run] $submodule: would pull origin $target"
+        elif [[ "$PULL_MODE" == "rebase" ]]; then
+          info "[dry-run] $submodule: would pull --rebase origin $target"
+        elif [[ "$PULL_MODE" == "merge" ]]; then
+          info "[dry-run] $submodule: would pull --no-rebase origin $target"
+        else
+          info "[dry-run] $submodule: would pull --ff-only origin $target"
+        fi
+        ;;
+      switch_and_pull)
+        if has_local_branch "$submodule" "$target"; then
+          info "[dry-run] $submodule: would checkout $target"
+        else
+          info "[dry-run] $submodule: would checkout -b $target --track origin/$target"
+        fi
+        if $RESET_HARD; then
+          info "[dry-run] $submodule: would reset --hard origin/$target"
+        elif [[ "$PULL_MODE" == "default" ]]; then
+          info "[dry-run] $submodule: would pull origin $target"
+        elif [[ "$PULL_MODE" == "rebase" ]]; then
+          info "[dry-run] $submodule: would pull --rebase origin $target"
+        elif [[ "$PULL_MODE" == "merge" ]]; then
+          info "[dry-run] $submodule: would pull --no-rebase origin $target"
+        else
+          info "[dry-run] $submodule: would pull --ff-only origin $target"
+        fi
+        ;;
+    esac
+  else
+    (
+      cd "$submodule"
+      case "$action" in
+        checkout_detached)
+          if $RESET_HARD; then
+            info "$submodule: resetting to $target (detached)"
+            git reset --hard "$target" --quiet
+          else
+            info "$submodule: checking out $target (detached)"
+            git checkout "$target" --quiet
+          fi
+          ;;
+        pull)
+          if $RESET_HARD; then
+            info "$submodule: resetting to origin/$target"
+            git reset --hard "origin/$target" --quiet
+          elif [[ "$PULL_MODE" == "default" ]]; then
+            info "$submodule: pulling (default)"
+            git pull origin "$target" --quiet
+          elif [[ "$PULL_MODE" == "rebase" ]]; then
+            info "$submodule: pulling (rebase)"
+            git pull --rebase origin "$target" --quiet
+          elif [[ "$PULL_MODE" == "merge" ]]; then
+            info "$submodule: pulling (merge)"
+            git pull --no-rebase origin "$target" --quiet
+          else
+            info "$submodule: pulling --ff-only"
+            git pull --ff-only origin "$target" --quiet
+          fi
+          ;;
+        switch_and_pull)
+          if $RESET_HARD; then
+            info "$submodule: discarding local changes"
+            git reset --hard --quiet
+          fi
+
+          if git show-ref --verify --quiet "refs/heads/$target"; then
+            info "$submodule: checking out $target"
+            git checkout "$target" --quiet
+          else
+            info "$submodule: checking out new branch $target tracking origin/$target"
+            git checkout -b "$target" --track "origin/$target" --quiet
+          fi
+
+          if $RESET_HARD; then
+            info "$submodule: resetting to origin/$target"
+            git reset --hard "origin/$target" --quiet
+          elif [[ "$PULL_MODE" == "default" ]]; then
+            info "$submodule: pulling (default)"
+            git pull origin "$target" --quiet
+          elif [[ "$PULL_MODE" == "rebase" ]]; then
+            info "$submodule: pulling (rebase)"
+            git pull --rebase origin "$target" --quiet
+          elif [[ "$PULL_MODE" == "merge" ]]; then
+            info "$submodule: pulling (merge)"
+            git pull --no-rebase origin "$target" --quiet
+          else
+            info "$submodule: pulling --ff-only"
+            git pull --ff-only origin "$target" --quiet
+          fi
+          ;;
+      esac
+    ) && UPDATED_SUBMODULES+=("$submodule") || {
+      warn "$submodule: update failed"
+    }
+  fi
+done
+
+# ============================================================================
+# STEP E: Commit if -m provided
+# ============================================================================
+if [[ -n "$COMMIT_MSG" ]]; then
+  if $DRY_RUN; then
+    info "[dry-run] Would stage and commit with message: $COMMIT_MSG"
+  else
+    # Stage updated submodules
+    STAGED=false
+    for submodule in "${UPDATED_SUBMODULES[@]}"; do
+      if git diff --quiet "$submodule" 2>/dev/null; then
+        : # No changes
+      else
+        git add "$submodule"
+        STAGED=true
+      fi
+    done
+
+    if $STAGED; then
+      git commit -m "$COMMIT_MSG"
+      success "Committed submodule updates"
+    else
+      info "No submodule changes to commit"
+    fi
+  fi
+fi
+
+success "Done"
